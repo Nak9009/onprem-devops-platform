@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# /etc/containerd/certs.d/{{ item }}/hosts.toml
+server = "http://{{ item }}"
+
+[host."http://{{ item }}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true

@@ -1,0 +1,65 @@
+---
+# roles/calico/tasks/main.yml
+
+- name: Open Calico CNI ports (BGP 179/tcp, VXLAN 4789/udp, Typha 5473/tcp) in UFW
+  when: ufw_enabled | default(true) | bool
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "179", proto: "tcp", comment: "Calico BGP Peering" }
+    - { port: "4789", proto: "udp", comment: "Calico VXLAN Overlay" }
+    - { port: "5473", proto: "tcp", comment: "Calico Typha Agent" }
+  tags: [calico, firewall]
+
+- name: Deploy Calico CNI ({{ calico_pinned_version }}) on Primary Control Plane Node
+  when: inventory_hostname == calico_primary_cp
+  block:
+    - name: Ensure /etc/kubernetes/addons/calico directory exists
+      ansible.builtin.file:
+        path: /etc/kubernetes/addons/calico
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download pinned Calico manifest ({{ calico_pinned_version }})
+      ansible.builtin.get_url:
+        url: "{{ calico_manifest_url }}"
+        dest: /etc/kubernetes/addons/calico/calico.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      register: calico_dl
+      retries: 3
+      delay: 10
+      until: calico_dl is succeeded
+
+    - name: Configure CALICO_IPV4POOL_CIDR to match cluster pod_cidr ({{ calico_pod_cidr }})
+      ansible.builtin.replace:
+        path: /etc/kubernetes/addons/calico/calico.yaml
+        regexp: '# - name: CALICO_IPV4POOL_CIDR\n(\s+)#   value: "192\.168\.0\.0/16"'
+        replace: '- name: CALICO_IPV4POOL_CIDR\n\1  value: "{{ calico_pod_cidr }}"'
+
+    - name: Apply Calico CNI manifest to Kubernetes cluster
+      ansible.builtin.command:
+        cmd: kubectl apply -f /etc/kubernetes/addons/calico/calico.yaml
+      register: calico_apply_out
+      changed_when: "'created' in calico_apply_out.stdout or 'configured' in calico_apply_out.stdout"
+
+    - name: Wait for Calico DaemonSet (calico-node) rollout to complete
+      ansible.builtin.command:
+        cmd: kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
+      changed_when: false
+
+    - name: Wait for all Kubernetes nodes to reach Ready state
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Ready nodes --all --timeout=180s
+      changed_when: false
+
+    - name: Display Calico CNI status summary
+      ansible.builtin.debug:
+        msg: "[PASS] Calico CNI ({{ calico_pinned_version }}) is active with Pod CIDR {{ calico_pod_cidr }} and all nodes are Ready."
+  tags: [calico, deploy, validate]

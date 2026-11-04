@@ -1,0 +1,70 @@
+---
+# kubernetes/argocd/projects.yaml
+# Environment-Scoped Argo CD AppProjects (dev, staging, production)
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: dev-project
+  namespace: argocd
+spec:
+  description: "Development Environment Project (Automated Sync Allowed)"
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: dev
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: staging-project
+  namespace: argocd
+spec:
+  description: "Staging Environment Project (Pre-Production Validation)"
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: staging
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: production-project
+  namespace: argocd
+spec:
+  description: "Production Environment Project (Strict Manual Approval Required)"
+  sourceRepos:
+    - "https://gitlab.devops.local/devops/gitops.git"
+    - "https://gitlab.internal.example.com/devops/gitops.git"
+  destinations:
+    - namespace: production
+      server: https://kubernetes.default.svc
+    - namespace: ingress-nginx
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: storage
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: networking.k8s.io
+      kind: IngressClass
+    - group: storage.k8s.io
+      kind: StorageClass
+  roles:
+    - name: prod-approver
+      description: "Production Release Approvers"
+      policies:
+        - p, proj:production-project:prod-approver, applications, get, production-project/*, allow
+        - p, proj:production-project:prod-approver, applications, sync, production-project/*, allow
+      groups:
+        - devops:release-managers

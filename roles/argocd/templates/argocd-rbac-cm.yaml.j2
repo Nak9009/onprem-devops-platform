@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+# /etc/kubernetes/addons/argocd/argocd-rbac-cm.yaml
+# Scoped RBAC Configuration for Argo CD (Least-Privilege + Production Approval Separation)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: {{ argocd_namespace }}
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  policy.default: role:readonly
+  policy.csv: |
+    # Developers can view all apps and trigger sync only in 'dev-project'
+    p, role:developer, applications, get, */*, allow
+    p, role:developer, applications, sync, dev-project/*, allow
+    p, role:developer, logs, get, dev-project/*, allow
+
+    # Release Engineers can approve and sync 'staging-project' and 'production-project'
+    p, role:release-approver, applications, get, */*, allow
+    p, role:release-approver, applications, sync, staging-project/*, allow
+    p, role:release-approver, applications, sync, production-project/*, allow
+    p, role:release-approver, applications, action/*, production-project/*, allow
+
+    # Group bindings
+    g, devops:developers, role:developer
+    g, devops:release-managers, role:release-approver
+    g, devops:platform-admins, role:admin

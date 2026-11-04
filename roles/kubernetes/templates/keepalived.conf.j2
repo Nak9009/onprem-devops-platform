@@ -1,0 +1,25 @@
+! {{ ansible_managed }}
+! /etc/keepalived/keepalived.conf - VRRP VIP for HA Kubernetes API Server
+vrrp_script chk_haproxy {
+    script "killall -0 haproxy"
+    interval 2
+    weight 2
+}
+
+vrrp_instance VI_K8S_API {
+    state {{ 'MASTER' if inventory_hostname == k8s_primary_cp_host else 'BACKUP' }}
+    interface {{ ansible_default_ipv4.interface | default('eth0') }}
+    virtual_router_id 51
+    priority {{ 101 if inventory_hostname == k8s_primary_cp_host else 100 }}
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass K8sHaVip2026
+    }
+    virtual_ipaddress {
+        {{ k8s_api_vip | default(k8s_primary_cp_ip) }}/24
+    }
+    track_script {
+        chk_haproxy
+    }
+}

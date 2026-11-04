@@ -1,0 +1,58 @@
+---
+# kubernetes/namespaces/rbac.yaml
+# Least-Privilege Kubernetes RBAC Roles and ServiceAccounts
+# Note: Jenkins is NEVER granted cluster-admin or direct production deployment permissions.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devops-readonly-auditor
+  namespace: production
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: namespace-workload-viewer
+  namespace: production
+rules:
+  - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+    resources: ["pods", "pods/log", "services", "deployments", "statefulsets", "ingresses", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bind-readonly-auditor
+  namespace: production
+subjects:
+  - kind: ServiceAccount
+    name: devops-readonly-auditor
+    namespace: production
+roleRef:
+  kind: Role
+  name: namespace-workload-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer-workload-manager
+  namespace: dev
+rules:
+  - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+    resources: ["pods", "pods/log", "pods/exec", "services", "configmaps", "deployments", "ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bind-developers-dev
+  namespace: dev
+subjects:
+  - kind: Group
+    name: "devops:developers"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: developer-workload-manager
+  apiGroup: rbac.authorization.k8s.io

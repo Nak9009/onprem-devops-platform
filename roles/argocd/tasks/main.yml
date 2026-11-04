@@ -1,0 +1,105 @@
+---
+# roles/argocd/tasks/main.yml
+
+- name: Deploy and Configure Argo CD ({{ argocd_pinned_version }}) on Kubernetes Cluster
+  when: inventory_hostname == argocd_primary_cp
+  block:
+    - name: Install apache2-utils (htpasswd) for bcrypt password hashing
+      ansible.builtin.apt:
+        name: apache2-utils
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/kubernetes/addons/argocd directory exists
+      ansible.builtin.file:
+        path: /etc/kubernetes/addons/argocd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download pinned Argo CD installation manifest ({{ argocd_pinned_version }})
+      ansible.builtin.get_url:
+        url: "{{ argocd_manifest_url }}"
+        dest: /etc/kubernetes/addons/argocd/install.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      register: argocd_dl
+      retries: 3
+      delay: 10
+      until: argocd_dl is succeeded
+
+    - name: Download pinned Argo CD CLI binary ({{ argocd_pinned_version }})
+      ansible.builtin.get_url:
+        url: "{{ argocd_cli_url }}"
+        dest: /usr/local/bin/argocd
+        owner: root
+        group: root
+        mode: "0755"
+      register: argocd_cli_dl
+      retries: 3
+      delay: 10
+      until: argocd_cli_dl is succeeded
+
+    - name: Ensure argocd namespace exists
+      ansible.builtin.command:
+        cmd: kubectl apply -f /etc/kubernetes/addons/namespaces/namespaces.yaml
+      changed_when: false
+
+    - name: Apply Argo CD core installation manifest
+      ansible.builtin.command:
+        cmd: "kubectl apply -n {{ argocd_namespace }} -f /etc/kubernetes/addons/argocd/install.yaml"
+      register: argocd_apply_out
+      changed_when: "'created' in argocd_apply_out.stdout or 'configured' in argocd_apply_out.stdout"
+
+    - name: Render scoped Argo CD RBAC ConfigMap (argocd-rbac-cm.yaml)
+      ansible.builtin.template:
+        src: argocd-rbac-cm.yaml.j2
+        dest: /etc/kubernetes/addons/argocd/argocd-rbac-cm.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply Argo CD RBAC ConfigMap and AppProjects (dev, staging, production)
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ item }}"
+      loop:
+        - /etc/kubernetes/addons/argocd/argocd-rbac-cm.yaml
+        - /etc/kubernetes/addons/argocd/projects.yaml
+      register: argocd_rbac_out
+      changed_when: "'created' in argocd_rbac_out.stdout or 'configured' in argocd_rbac_out.stdout"
+
+    - name: Expose argocd-server Service via NodePort ({{ argocd_nodeport_https }}) and Ingress
+      ansible.builtin.command:
+        cmd: >-
+          kubectl patch svc argocd-server -n {{ argocd_namespace }}
+          -p '{"spec": {"type": "NodePort", "ports": [{"name": "https", "port": 443, "targetPort": 8080, "nodePort": {{ argocd_nodeport_https }}}]}}'
+      changed_when: false
+
+    - name: Generate bcrypt hash for Vault-managed Argo CD admin password
+      ansible.builtin.command:
+        cmd: "htpasswd -nbBC 10 \"\" {{ argocd_admin_secret }}"
+      register: argocd_bcrypt_raw
+      no_log: true
+      changed_when: false
+
+    - name: Update argocd-secret with Vault-managed admin bcrypt password
+      ansible.builtin.command:
+        cmd: >-
+          kubectl -n {{ argocd_namespace }} patch secret argocd-secret
+          -p '{"stringData": {"admin.password": "{{ argocd_bcrypt_raw.stdout | regex_replace('^:', '') | trim }}", "admin.passwordMtime": "{{ ansible_date_time.iso8601 }}"}}'
+      no_log: true
+      changed_when: false
+
+    - name: Wait for Argo CD Server deployment rollout to complete
+      ansible.builtin.command:
+        cmd: "kubectl -n {{ argocd_namespace }} rollout status deployment/argocd-server --timeout=300s"
+      changed_when: false
+
+    - name: Display Argo CD status summary
+      ansible.builtin.debug:
+        msg: >-
+          [PASS] Argo CD ({{ argocd_pinned_version }}) is active in namespace '{{ argocd_namespace }}'
+          with scoped RBAC and AppProjects (dev-project, staging-project, production-project).
+  tags: [argocd, deploy, validate]

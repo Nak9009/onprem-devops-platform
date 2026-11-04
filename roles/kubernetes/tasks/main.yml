@@ -1,0 +1,310 @@
+---
+# roles/kubernetes/tasks/main.yml
+
+- name: Validate OS and swap prerequisites for Kubernetes
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version == "24.04"
+      - ansible_swaptotal_mb == 0
+    fail_msg: "Kubernetes requires Ubuntu 24.04 with swap disabled (swap={{ ansible_swaptotal_mb }} MB)."
+  tags: [kubernetes, prereqs]
+
+- name: Configure UFW firewall rules for Kubernetes Control Plane nodes
+  when:
+    - ufw_enabled | default(true) | bool
+    - "'k8s_control_plane' in group_names"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "6443", proto: "tcp", comment: "Kubernetes API Server" }
+    - { port: "8443", proto: "tcp", comment: "HAProxy API VIP Frontend" }
+    - { port: "2379:2380", proto: "tcp", comment: "etcd server client API" }
+    - { port: "10250", proto: "tcp", comment: "Kubelet API" }
+    - { port: "10257", proto: "tcp", comment: "kube-controller-manager" }
+    - { port: "10259", proto: "tcp", comment: "kube-scheduler" }
+  tags: [kubernetes, firewall]
+
+- name: Configure UFW firewall rules for Kubernetes Worker nodes
+  when:
+    - ufw_enabled | default(true) | bool
+    - "'k8s_workers' in group_names"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "10250", proto: "tcp", comment: "Kubelet API" }
+    - { port: "80", proto: "tcp", comment: "Ingress HTTP" }
+    - { port: "443", proto: "tcp", comment: "Ingress HTTPS" }
+    - { port: "30000:32767", proto: "tcp", comment: "Kubernetes NodePort Services" }
+  tags: [kubernetes, firewall]
+
+- name: Install Kubernetes DEB822 repository and pinned packages ({{ k8s_deb_version }})
+  block:
+    - name: Create /etc/apt/keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download official Kubernetes Release GPG key
+      ansible.builtin.get_url:
+        url: "{{ k8s_gpg_key_url }}"
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add Kubernetes DEB822 APT repository ({{ k8s_channel }})
+      ansible.builtin.deb822_repository:
+        name: kubernetes
+        types: [deb]
+        uris: ["{{ k8s_repo_url }}"]
+        suites: ["/"]
+        signed_by: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        state: present
+
+    - name: Install pinned kubelet, kubeadm, and kubectl packages
+      ansible.builtin.apt:
+        name:
+          - "kubelet={{ k8s_deb_version }}"
+          - "kubeadm={{ k8s_deb_version }}"
+          - "kubectl={{ k8s_deb_version }}"
+        state: present
+        update_cache: true
+        allow_downgrade: true
+      register: k8s_apt_out
+      retries: 3
+      delay: 10
+      until: k8s_apt_out is succeeded
+
+    - name: Hold kubelet, kubeadm, and kubectl versions via dpkg_selections
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+  tags: [kubernetes, packages]
+
+- name: Ensure kubelet service is enabled
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true
+  tags: [kubernetes, service]
+
+- name: Configure HAProxy and Keepalived for Multi-Node HA Control Plane
+  when:
+    - "'k8s_control_plane' in group_names"
+    - k8s_is_ha_control_plane | bool
+    - k8s_api_vip is defined
+  block:
+    - name: Install haproxy and keepalived on HA control-plane nodes
+      ansible.builtin.apt:
+        name:
+          - haproxy
+          - keepalived
+        state: present
+
+    - name: Render /etc/haproxy/haproxy.cfg
+      ansible.builtin.template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart haproxy
+
+    - name: Render /etc/keepalived/keepalived.conf
+      ansible.builtin.template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart keepalived
+
+    - name: Ensure haproxy and keepalived are started and enabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - haproxy
+        - keepalived
+
+    - name: Flush HA load balancer handlers
+      ansible.builtin.meta: flush_handlers
+  tags: [kubernetes, ha]
+
+- name: Initialize Primary Kubernetes Control Plane Node ({{ k8s_primary_cp_host }})
+  when: inventory_hostname == k8s_primary_cp_host
+  block:
+    - name: Check if Kubernetes control plane is already initialized
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: k8s_admin_conf
+
+    - name: Render /etc/kubernetes/kubeadm-config.yaml
+      ansible.builtin.template:
+        src: kubeadm-config.yaml.j2
+        dest: /etc/kubernetes/kubeadm-config.yaml
+        owner: root
+        group: root
+        mode: "0600"
+      when: not k8s_admin_conf.stat.exists
+
+    - name: Execute kubeadm init on primary control plane node
+      ansible.builtin.command:
+        cmd: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
+      when: not k8s_admin_conf.stat.exists
+      changed_when: true
+
+    - name: Create .kube directory for root and {{ admin_user | default('ansible') }}
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0700"
+      loop:
+        - { path: "/root/.kube", owner: "root", group: "root" }
+        - { path: "/home/{{ admin_user | default('ansible') }}/.kube", owner: "{{ admin_user | default('ansible') }}", group: "{{ admin_user | default('ansible') }}" }
+
+    - name: Copy /etc/kubernetes/admin.conf to user kubeconfig paths
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ item.dest }}"
+        remote_src: true
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0600"
+      loop:
+        - { dest: "/root/.kube/config", owner: "root", group: "root" }
+        - { dest: "/home/{{ admin_user | default('ansible') }}/.kube/config", owner: "{{ admin_user | default('ansible') }}", group: "{{ admin_user | default('ansible') }}" }
+
+    - name: Generate worker join command
+      ansible.builtin.command:
+        cmd: kubeadm token create --print-join-command
+      register: k8s_worker_join_cmd
+      changed_when: false
+      no_log: true
+
+    - name: Upload control-plane certificates and generate certificate key for HA control plane join
+      ansible.builtin.command:
+        cmd: kubeadm init phase upload-certs --upload-certs
+      register: k8s_cert_key_out
+      changed_when: false
+      no_log: true
+      when: k8s_is_ha_control_plane | bool
+
+    - name: Store join command facts on primary control plane host
+      ansible.builtin.set_fact:
+        k8s_join_command: "{{ k8s_worker_join_cmd.stdout }}"
+        k8s_cp_cert_key: "{{ k8s_cert_key_out.stdout_lines[-1] | default('') }}"
+      no_log: true
+  tags: [kubernetes, init]
+
+- name: Join Secondary Control Plane Nodes to HA Cluster
+  when:
+    - "'k8s_control_plane' in group_names"
+    - inventory_hostname != k8s_primary_cp_host
+  block:
+    - name: Check if secondary control-plane node is already joined
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: secondary_cp_joined
+
+    - name: Join secondary control-plane node via kubeadm join --control-plane
+      ansible.builtin.command:
+        cmd: >-
+          {{ hostvars[k8s_primary_cp_host]['k8s_join_command'] }}
+          --control-plane
+          --certificate-key {{ hostvars[k8s_primary_cp_host]['k8s_cp_cert_key'] }}
+          --apiserver-advertise-address {{ ansible_default_ipv4.address | default(ansible_host) }}
+      when: not secondary_cp_joined.stat.exists
+      no_log: true
+      changed_when: true
+  tags: [kubernetes, join_cp]
+
+- name: Join Dedicated Worker Nodes to Kubernetes Cluster
+  when:
+    - "'k8s_workers' in group_names"
+    - "'k8s_control_plane' not in group_names"
+  block:
+    - name: Check if worker node is already joined
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: worker_node_joined
+
+    - name: Join worker node via kubeadm join
+      ansible.builtin.command:
+        cmd: "{{ hostvars[k8s_primary_cp_host]['k8s_join_command'] }}"
+      when: not worker_node_joined.stat.exists
+      no_log: true
+      changed_when: true
+  tags: [kubernetes, join_workers]
+
+- name: Allow workload scheduling on single-node control plane when configured
+  when:
+    - inventory_hostname == k8s_primary_cp_host
+    - k8s_untaint_control_plane | bool
+  ansible.builtin.shell:
+    cmd: kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+  changed_when: false
+  tags: [kubernetes, single_node]
+
+- name: Copy baseline Kubernetes manifests (Namespaces, RBAC, Quotas, NetworkPolicies, StorageClass)
+  when: inventory_hostname == k8s_primary_cp_host
+  block:
+    - name: Ensure /etc/kubernetes/addons directory exists
+      ansible.builtin.file:
+        path: /etc/kubernetes/addons
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Synchronize baseline Kubernetes manifests to primary control-plane node
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../kubernetes/"
+        dest: /etc/kubernetes/addons/
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply namespaces, RBAC, ResourceQuotas, NetworkPolicies, and StorageClass manifests
+      ansible.builtin.command:
+        cmd: "kubectl apply -f /etc/kubernetes/addons/{{ item }}"
+      loop:
+        - namespaces/namespaces.yaml
+        - namespaces/rbac.yaml
+        - namespaces/resource-quotas.yaml
+        - namespaces/network-policies.yaml
+        - storage/storageclass.yaml
+      register: k8s_addons_apply
+      changed_when: "'created' in k8s_addons_apply.stdout or 'configured' in k8s_addons_apply.stdout"
+  tags: [kubernetes, addons]
+
+- name: Validate Kubernetes API server health on primary control plane
+  when: inventory_hostname == k8s_primary_cp_host
+  block:
+    - name: Check Kubernetes API /livez endpoint
+      ansible.builtin.command:
+        cmd: kubectl get --raw='/livez'
+      register: k8s_livez
+      changed_when: false
+      failed_when: k8s_livez.stdout != "ok"
+
+    - name: Display Kubernetes cluster status summary
+      ansible.builtin.debug:
+        msg: "[PASS] Kubernetes v{{ k8s_semver }} control plane is initialized and healthy on {{ inventory_hostname }}."
+  tags: [kubernetes, validate]

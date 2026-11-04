@@ -1,0 +1,22 @@
+---
+# roles/kubernetes/defaults/main.yml
+
+k8s_semver: "{{ kubernetes_version | default('1.31.4') }}"
+k8s_deb_version: "{{ kubernetes_apt_version | default('1.31.4-1.1') }}"
+k8s_channel: "{{ kubernetes_minor_channel | default('v1.31') }}"
+k8s_repo_url: "https://pkgs.k8s.io/core:/stable:/{{ k8s_channel }}/deb/"
+k8s_gpg_key_url: "https://pkgs.k8s.io/core:/stable:/{{ k8s_channel }}/deb/Release.key"
+
+k8s_cluster_name: "{{ cluster_name | default('onprem-k8s') }}"
+k8s_pod_subnet: "{{ pod_cidr | default('10.244.0.0/16') }}"
+k8s_service_subnet: "{{ service_cidr | default('10.96.0.0/12') }}"
+k8s_dns_ip: "{{ cluster_dns_ip | default('10.96.0.10') }}"
+
+k8s_is_ha_control_plane: "{{ (groups['k8s_control_plane'] | default([]) | length) > 1 }}"
+k8s_primary_cp_host: "{{ groups['k8s_control_plane'][0] }}"
+k8s_primary_cp_ip: "{{ hostvars[k8s_primary_cp_host]['ansible_default_ipv4']['address'] | default(hostvars[k8s_primary_cp_host]['ansible_host']) }}"
+k8s_api_endpoint_host: "{{ k8s_api_vip if (k8s_is_ha_control_plane and k8s_api_vip is defined) else k8s_primary_cp_ip }}"
+k8s_api_endpoint_port: "{{ 8443 if (k8s_is_ha_control_plane and k8s_api_vip is defined) else 6443 }}"
+
+# Allow workloads on control-plane when running a single-node cluster (e.g. compact profile)
+k8s_untaint_control_plane: "{{ (k8s_single_node_allow_workloads | default(false) | bool) or (groups['k8s_workers'] | default([]) == groups['k8s_control_plane'] | default([])) }}"

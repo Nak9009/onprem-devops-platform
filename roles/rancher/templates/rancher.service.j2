@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+# /etc/systemd/system/rancher.service - Rancher Multi-Cluster Management Server
+[Unit]
+Description=Rancher Kubernetes Management Server ({{ rancher_pinned_version }})
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+ExecStartPre=-/usr/bin/docker rm -f rancher
+ExecStart=/usr/bin/docker run --rm --name rancher \
+  --privileged \
+  -p {{ rancher_http_host_port }}:80 \
+  -p {{ rancher_https_host_port }}:443 \
+  -e CATTLE_BOOTSTRAP_PASSWORD="{{ rancher_bootstrap_secret }}" \
+  -v {{ rancher_data_dir }}:/var/lib/rancher \
+  {{ rancher_container_image }}
+ExecStop=/usr/bin/docker stop -t 60 rancher
+
+[Install]
+WantedBy=multi-user.target

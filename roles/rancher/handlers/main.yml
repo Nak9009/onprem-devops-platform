@@ -1,0 +1,8 @@
+---
+# roles/rancher/handlers/main.yml
+
+- name: Restart rancher
+  ansible.builtin.systemd:
+    name: rancher
+    state: restarted
+    daemon_reload: true

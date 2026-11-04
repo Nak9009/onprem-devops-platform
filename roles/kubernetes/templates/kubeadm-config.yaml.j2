@@ -1,0 +1,51 @@
+# {{ ansible_managed }}
+# /etc/kubernetes/kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_default_ipv4.address | default(ansible_host) }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+  imagePullPolicy: "IfNotPresent"
+  name: "{{ inventory_hostname }}"
+  taints:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "v{{ k8s_semver }}"
+clusterName: "{{ k8s_cluster_name }}"
+controlPlaneEndpoint: "{{ k8s_api_endpoint_host }}:{{ k8s_api_endpoint_port }}"
+networking:
+  dnsDomain: "cluster.local"
+  podSubnet: "{{ k8s_pod_subnet }}"
+  serviceSubnet: "{{ k8s_service_subnet }}"
+apiServer:
+  certSANs:
+    - "127.0.0.1"
+    - "{{ k8s_api_endpoint_host }}"
+    - "k8s-api.{{ domain | default('devops.local') }}"
+{% for host in groups['k8s_control_plane'] | default([]) %}
+    - "{{ host }}"
+    - "{{ host }}.{{ domain | default('devops.local') }}"
+    - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}"
+{% endfor %}
+controllerManager:
+  extraArgs:
+    - name: bind-address
+      value: "0.0.0.0"
+scheduler:
+  extraArgs:
+    - name: bind-address
+      value: "0.0.0.0"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+clusterDNS:
+  - "{{ k8s_dns_ip }}"
+clusterDomain: "cluster.local"
+failSwapOn: true
+serverTLSBootstrap: true

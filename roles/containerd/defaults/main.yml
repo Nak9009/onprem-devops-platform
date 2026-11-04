@@ -1,0 +1,11 @@
+---
+# roles/containerd/defaults/main.yml
+
+containerd_pinned_version: "{{ containerd_version | default('1.7.24-0ubuntu1~24.04.2') }}"
+containerd_pause_image: "registry.k8s.io/pause:3.10"
+containerd_systemd_cgroup: true
+
+containerd_nexus_registries:
+  - "{{ docker_registry_domain | default('registry.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+  - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+  - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_group_port | default(5001) }}"

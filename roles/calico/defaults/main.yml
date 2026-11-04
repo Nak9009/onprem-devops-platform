@@ -1,0 +1,7 @@
+---
+# roles/calico/defaults/main.yml
+
+calico_pinned_version: "{{ calico_version | default('v3.29.1') }}"
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_pinned_version }}/manifests/calico.yaml"
+calico_pod_cidr: "{{ pod_cidr | default('10.244.0.0/16') }}"
+calico_primary_cp: "{{ groups['k8s_control_plane'][0] }}"

@@ -1,0 +1,85 @@
+---
+# roles/containerd/tasks/main.yml
+
+- name: Validate OS prerequisites for containerd
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version == "24.04"
+    fail_msg: "containerd role requires Ubuntu 24.04 LTS."
+  tags: [containerd, prereqs]
+
+- name: Install containerd package with pinned version fallback
+  block:
+    - name: Install pinned containerd package ({{ containerd_pinned_version }})
+      ansible.builtin.apt:
+        name:
+          - "containerd={{ containerd_pinned_version }}"
+          - runc
+        state: present
+        update_cache: true
+        allow_downgrade: true
+  rescue:
+    - name: Fallback to latest Ubuntu 24.04 security-patched containerd package
+      ansible.builtin.apt:
+        name:
+          - containerd
+          - runc
+        state: present
+        update_cache: true
+  tags: [containerd, packages]
+
+- name: Create /etc/containerd and certs.d directories for private Nexus registries
+  ansible.builtin.file:
+    path: "/etc/containerd/certs.d/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ containerd_nexus_registries }}"
+  tags: [containerd, config]
+
+- name: Configure containerd hosts.toml for internal Nexus Docker registries
+  ansible.builtin.template:
+    src: nexus-hosts.toml.j2
+    dest: "/etc/containerd/certs.d/{{ item }}/hosts.toml"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ containerd_nexus_registries }}"
+  notify: Restart containerd
+  tags: [containerd, config]
+
+- name: Render /etc/containerd/config.toml with SystemdCgroup enabled
+  ansible.builtin.template:
+    src: config.toml.j2
+    dest: /etc/containerd/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart containerd
+  tags: [containerd, config]
+
+- name: Ensure containerd service is started and enabled
+  ansible.builtin.systemd:
+    name: containerd
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags: [containerd, service]
+
+- name: Flush handlers before validating containerd socket
+  ansible.builtin.meta: flush_handlers
+  tags: [containerd, validate]
+
+- name: Verify containerd socket is active and responsive
+  ansible.builtin.command:
+    cmd: ctr version
+  register: ctr_version_out
+  changed_when: false
+  tags: [containerd, validate]
+
+- name: Display containerd status summary
+  ansible.builtin.debug:
+    msg: "[PASS] containerd CRI runtime (SystemdCgroup=true) is active on {{ inventory_hostname }}."
+  tags: [containerd, validate]

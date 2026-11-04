@@ -1,0 +1,34 @@
+# {{ ansible_managed }}
+# /etc/haproxy/haproxy.cfg - HA Kubernetes API Server Load Balancer
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+
+defaults
+    mode                    tcp
+    log                     global
+    option                  tcplog
+    option                  dontlognull
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout check           10s
+    maxconn                 3000
+
+frontend k8s_apiserver
+    bind *:{{ k8s_api_endpoint_port }}
+    mode tcp
+    option tcplog
+    default_backend k8s_controlplane_nodes
+
+backend k8s_controlplane_nodes
+    mode tcp
+    option tcp-check
+    balance roundrobin
+{% for host in groups['k8s_control_plane'] | default([]) %}
+    server {{ host }} {{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:6443 check fall 3 rise 2
+{% endfor %}

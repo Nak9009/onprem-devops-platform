@@ -1,0 +1,21 @@
+---
+# playbooks/kubernetes.yml
+# Configures containerd CRI runtime and initializes/joins the Kubernetes v1.31.4 cluster.
+
+- name: Configure Containerd CRI and Deploy Kubernetes Cluster
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: containerd
+      tags: [containerd, kubernetes]
+    - role: kubernetes
+      tags: [kubernetes]
