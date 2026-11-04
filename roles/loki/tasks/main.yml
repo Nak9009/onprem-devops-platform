@@ -1,6 +1,13 @@
 ---
 # roles/loki/tasks/main.yml
 
+- name: Ensure unzip is installed for extracting Loki and Promtail archives
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+    update_cache: true
+  tags: [loki, promtail, prereqs]
+
 - name: Deploy Grafana Loki Server on 'monitoring' group nodes
   when: "'monitoring' in group_names"
   block:

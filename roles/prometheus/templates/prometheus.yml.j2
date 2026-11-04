@@ -22,6 +22,7 @@ scrape_configs:
           - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ node_exporter_web_port }}"
 {% endfor %}
 
+{% if groups.get('minio', []) | length > 0 %}
   - job_name: "minio"
     metrics_path: /minio/v2/metrics/cluster
     scheme: http
@@ -30,11 +31,13 @@ scrape_configs:
 {% for host in groups.get('minio', []) %}
           - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ minio_api_port | default(9000) }}"
 {% endfor %}
+{% endif %}
 
+{% if groups.get('monitoring', []) | length > 0 %}
   - job_name: "loki"
     static_configs:
       - targets:
 {% for host in groups.get('monitoring', []) %}
           - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ loki_port | default(3100) }}"
 {% endfor %}
-
+{% endif %}

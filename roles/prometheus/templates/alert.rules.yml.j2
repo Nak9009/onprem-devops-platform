@@ -1,5 +1,6 @@
-# {{ ansible_managed }}
+# Managed by Ansible
 # /etc/prometheus/rules/alert.rules.yml - Platform Infrastructure & Service Alerts
+{% raw %}
 groups:
   - name: infrastructure_alerts
     rules:
@@ -38,4 +39,4 @@ groups:
         annotations:
           summary: "Low root filesystem disk space (<15% free) on {{ $labels.instance }}"
           description: "Root filesystem on {{ $labels.instance }} has less than 15% free space remaining."
-
+{% endraw %}
