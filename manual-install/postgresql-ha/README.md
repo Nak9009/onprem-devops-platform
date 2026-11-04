@@ -133,6 +133,134 @@ sudo systemctl enable --now patroni
 
 ---
 
+## 3.1 Configure HAProxy + Keepalived VIP (`10.20.50.10`) for Automatic Routing
+
+HAProxy polls Patroni's HTTP health endpoints (`:8008/primary` and `:8008/replica`) so clients always connect to a single VIP (`10.20.50.10` / `pg-rw.internal.example.com`):
+- **Port `5432` (Read-Write):** Routes **only** to the current Leader (`pg-db1`, or `pg-db2` after failover).
+- **Port `5433` (Read-Only):** Load-balances read queries across healthy Standbys (`pg-db2` and `pg-db3`).
+
+```bash
+sudo tee /etc/haproxy/haproxy.cfg >/dev/null <<'EOF'
+global
+    log /dev/log local0
+    maxconn 1000
+    daemon
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    retries 3
+    timeout queue   1m
+    timeout connect 5s
+    timeout client  30m
+    timeout server  30m
+    timeout check   2s
+
+# Read-Write Endpoint (:5432 -> Active Patroni Leader ONLY)
+listen postgres_rw
+    bind *:5432
+    mode tcp
+    option httpchk GET /primary
+    http-check expect status 200
+    default-server inter 2s fall 3 rise 2 on-marked-down shutdown-sessions
+    server pg-db1 10.20.50.11:5432 maxconn 300 check port 8008
+    server pg-db2 10.20.50.12:5432 maxconn 300 check port 8008
+    server pg-db3 10.20.50.13:5432 maxconn 300 check port 8008
+
+# Read-Only Endpoint (:5433 -> Load-Balanced across Standbys)
+listen postgres_ro
+    bind *:5433
+    mode tcp
+    balance roundrobin
+    option httpchk GET /replica
+    http-check expect status 200
+    default-server inter 2s fall 3 rise 2
+    server pg-db1 10.20.50.11:5432 maxconn 300 check port 8008
+    server pg-db2 10.20.50.12:5432 maxconn 300 check port 8008
+    server pg-db3 10.20.50.13:5432 maxconn 300 check port 8008
+EOF
+
+sudo systemctl restart haproxy
+```
+
+### Create Application Database & Least-Privilege User (Run on Leader `pg-db1`)
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE ROLE app_user WITH LOGIN PASSWORD 'ChangeMe_AppDbPass_2026!';
+CREATE DATABASE app_prod OWNER app_user;
+GRANT ALL PRIVILEGES ON DATABASE app_prod TO app_user;
+SQL
+```
+
+---
+
+## 3.2 How to Connect to the PostgreSQL HA Cluster
+
+There are **two supported ways** for applications and administrators to connect to the HA cluster with automatic failover:
+
+### Method A: Connect via the HAProxy + Keepalived VIP (Recommended)
+Connect to the single Virtual IP (`10.20.50.10` / `pg-rw.internal.example.com`):
+- **Read-Write (Primary Leader):** `10.20.50.10:5432`
+- **Read-Only (Standby Replicas):** `10.20.50.10:5433`
+
+```bash
+# 1. Connect to the Read-Write Leader (:5432) via psql CLI
+PGPASSWORD='ChangeMe_AppDbPass_2026!' psql -h 10.20.50.10 -p 5432 -U app_user -d app_prod \
+  -c "SELECT inet_server_addr() AS connected_node, pg_is_in_recovery() AS is_replica;"
+# Output: connected_node = 10.20.50.11 (pg-db1) | is_replica = f (Leader)
+
+# 2. Connect to the Read-Only Standby Pool (:5433) via psql CLI
+PGPASSWORD='ChangeMe_AppDbPass_2026!' psql -h 10.20.50.10 -p 5433 -U app_user -d app_prod \
+  -c "SELECT inet_server_addr() AS connected_node, pg_is_in_recovery() AS is_replica;"
+# Output: connected_node = 10.20.50.12 (pg-db2) or 10.20.50.13 (pg-db3) | is_replica = t (Standby)
+```
+
+### Method B: Connect via Native Multi-Host `libpq` Connection String (No VIP Required)
+All modern PostgreSQL drivers (`psql`, `psycopg2`/`psycopg3`, `pgx`, JDBC, `node-postgres`) support listing all 3 nodes (`pg-db1,pg-db2,pg-db3`) with `target_session_attrs`:
+- `target_session_attrs=read-write` → Automatically discovers and connects **only** to the current Leader (`pg-db1`, or `pg-db2` after failover).
+- `target_session_attrs=prefer-standby` → Automatically connects to a Read-Only Standby replica (`pg-db2` or `pg-db3`).
+
+```bash
+# Automatically find and connect to the current Read-Write Leader across pg-db1..3:
+psql "postgresql://app_user:ChangeMe_AppDbPass_2026!@10.20.50.11:5432,10.20.50.12:5432,10.20.50.13:5432/app_prod?target_session_attrs=read-write"
+
+# Automatically connect to a Read-Only Replica across pg-db1..3:
+psql "postgresql://app_user:ChangeMe_AppDbPass_2026!@10.20.50.11:5432,10.20.50.12:5432,10.20.50.13:5432/app_prod?target_session_attrs=prefer-standby"
+```
+
+### Method C: Connecting from Applications in the Layer 3 Kubernetes Cluster
+
+Create a Kubernetes `Secret` in the application namespace (`dev`, `staging`, or `production`) on the **Application Kubernetes Cluster**:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-ha-credentials
+  namespace: production
+type: Opaque
+stringData:
+  # Option 1: Via HAProxy VIP (Read-Write :5432 / Read-Only :5433)
+  DATABASE_URL: "postgresql://app_user:ChangeMe_AppDbPass_2026!@10.20.50.10:5432/app_prod?sslmode=prefer"
+  DATABASE_READ_URL: "postgresql://app_user:ChangeMe_AppDbPass_2026!@10.20.50.10:5433/app_prod?sslmode=prefer"
+
+  # Option 2: Multi-Host Client Failover (works even without a VIP)
+  DATABASE_MULTIHOST_RW_URL: "postgresql://app_user:ChangeMe_AppDbPass_2026!@10.20.50.11:5432,10.20.50.12:5432,10.20.50.13:5432/app_prod?target_session_attrs=read-write"
+
+  # Framework-specific variables (e.g., Laravel .env)
+  DB_CONNECTION: "pgsql"
+  DB_WRITE_HOST: "10.20.50.10"
+  DB_WRITE_PORT: "5432"
+  DB_READ_HOST: "10.20.50.10"
+  DB_READ_PORT: "5433"
+  DB_DATABASE: "app_prod"
+  DB_USERNAME: "app_user"
+  DB_PASSWORD: "ChangeMe_AppDbPass_2026!"
+```
+
+---
+
 ## 4. PostgreSQL HA CLI Reference (`patronictl`, `psql`, `pgbackrest`, `etcdctl`)
 
 ### 4.1 `patronictl` CLI (HA Cluster & Failover Management)
