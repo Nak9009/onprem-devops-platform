@@ -24,7 +24,7 @@ Usage: $(basename "$0") [OPTIONS]
 
 Options:
   -p, --profile <name>     VM sizing profile: compact (default, <=24GB host), minimal (32GB), ha (48GB)
-  -v, --vm <name1,name2>   Provision only specific VM(s) from the profile (useful when host disk is low)
+  -v, --vm, --only <names> Provision only specific VM(s) from the profile (comma-separated)
   -r, --recreate           Destroy existing profile VMs (with confirmation) before creating
   -d, --dry-run            Validate resources and display planned multipass commands without executing
   -f, --allow-overcommit   Allow launching even if total VM RAM exceeds 80% of host physical RAM
@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
       PROFILE="$2"
       shift 2
       ;;
-    -v|--vm)
+    -v|--vm|-o|--only)
       TARGET_VM_FILTER="$2"
       shift 2
       ;;
