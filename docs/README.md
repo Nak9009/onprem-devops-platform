@@ -11,7 +11,7 @@ This index maps all **23 documentation topics** required by **Section 15** to th
 | 5 | **Ansible Installation** | [docs/production-installation.md — Section 2.1](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L70-L80) |
 | 6 | **Ansible Inventory Configuration** | [docs/production-installation.md — Section 2.2](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L82-L96) |
 | 7 | **Local Deployment Guide** | [docs/local-installation.md — Sections 3 & 4](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/local-installation.md#L40-L64) |
-| 8 | **Production Manual Installation Guide** | [docs/production-installation.md — Section 3](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L100-L227) |
+| 8 | **Production Manual Installation Guide** | [docs/manual-installation.md](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/manual-installation.md) & [docs/production-installation.md](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md) |
 | 9 | **Kubernetes HA Installation** | [docs/production-installation.md — Section 3.5](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L172-L209) |
 | 10 | **Calico Installation** | [docs/production-installation.md — Section 3.5 (Step 7)](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L198-L209) & [docs/networking.md](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/networking.md) |
 | 11 | **Rancher Installation** | [docs/production-installation.md — Section 3.6](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/production-installation.md#L211-L223) |

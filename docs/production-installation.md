@@ -172,7 +172,9 @@ ansible-playbook -i inventories/production/hosts.yml --private-key ~/.ssh/id_ed2
 
 ## 5. Manual Service Installation Reference (Step-by-Step Commands)
 
-If an operator needs to install or inspect any service manually on a VMware Ubuntu 24.04 VM:
+> **Full Server-by-Server Runbook:** For complete copy-pasteable manual installation commands, configuration files, systemd units, and firewall rules for every individual server, see [**docs/manual-installation.md**](file:///Users/ratanakieng/labs/onprem-devops-platform/docs/manual-installation.md).
+
+If an operator needs a quick reference on a VMware Ubuntu 24.04 VM:
 
 ### 5.1 Manual HA Control Plane Load Balancer (`prod-k8s-cp01..03`)
 - **Packages:** `sudo apt install -y haproxy keepalived`
