@@ -1,0 +1,74 @@
+---
+# roles/common/tasks/system.yml
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+
+- name: Configure Chrony NTP client
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Ensure Chrony service is started and enabled
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Configure persistent kernel modules load file
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/99-devops-k8s.conf
+    content: |
+      # {{ ansible_managed }}
+      {% for mod in common_kernel_modules %}
+      {{ mod }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Load required kernel modules immediately
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ common_kernel_modules }}"
+
+- name: Apply sysctl kernel parameters
+  ansible.builtin.template:
+    src: 99-devops-sysctl.conf.j2
+    dest: /etc/sysctl.d/99-devops-sysctl.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload sysctl
+
+- name: Configure system security limits (nofile/nproc)
+  ansible.builtin.template:
+    src: 99-devops-limits.conf.j2
+    dest: /etc/security/limits.d/99-devops-limits.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Disable swap on Kubernetes nodes when required by kubelet
+  when:
+    - "'k8s_cluster' in group_names or 'rancher' in group_names"
+    - not (enable_swap_for_k8s | default(false) | bool)
+  block:
+    - name: Disable active swap immediately
+      ansible.builtin.command:
+        cmd: swapoff -a
+      when: ansible_swaptotal_mb > 0
+      changed_when: true
+
+    - name: Comment out swap entries in /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+.*)$'
+        replace: '# \1'
+

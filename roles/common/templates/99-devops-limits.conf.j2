@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# Resource limits for DevOps Platform services (GitLab, Nexus, Jenkins, Kubernetes, Loki)
+* soft nofile {{ common_ulimit_nofile_soft }}
+* hard nofile {{ common_ulimit_nofile_hard }}
+* soft nproc  {{ common_ulimit_nproc_soft }}
+* hard nproc  {{ common_ulimit_nproc_hard }}
+root soft nofile {{ common_ulimit_nofile_soft }}
+root hard nofile {{ common_ulimit_nofile_hard }}
+

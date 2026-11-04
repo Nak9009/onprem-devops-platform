@@ -1,0 +1,23 @@
+---
+# playbooks/common.yml
+# Phase 1 & 2 Baseline OS Configuration Playbook
+# Usage:
+#   Local:      ansible-playbook -i inventories/local/hosts.yml playbooks/common.yml
+#   Production: ansible-playbook -i inventories/production/hosts.yml playbooks/common.yml --ask-vault-pass
+
+- name: Apply Common Baseline Configuration Across All Platform Nodes
+  hosts: all
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [common]
+

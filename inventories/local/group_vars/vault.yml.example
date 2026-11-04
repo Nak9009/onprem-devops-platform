@@ -1,0 +1,16 @@
+---
+# inventories/local/group_vars/vault.yml.example
+# Copy to inventories/local/group_vars/vault.yml and encrypt with:
+#   ansible-vault encrypt inventories/local/group_vars/vault.yml
+
+vault_gitlab_root_password: "ChangeMe_LocalGitLabRoot!2026"
+vault_jenkins_admin_password: "ChangeMe_LocalJenkinsAdmin!2026"
+vault_nexus_admin_password: "ChangeMe_LocalNexusAdmin!2026"
+vault_rancher_bootstrap_password: "ChangeMe_LocalRancherBootstrap!2026"
+vault_argocd_admin_password: "ChangeMe_LocalArgoCDAdmin!2026"
+vault_minio_root_user: "minioadmin"
+vault_minio_root_password: "ChangeMe_LocalMinIORoot!2026"
+vault_grafana_admin_password: "ChangeMe_LocalGrafanaAdmin!2026"
+vault_postgres_password: "ChangeMe_LocalPostgres!2026"
+vault_sonarqube_admin_password: "ChangeMe_LocalSonarAdmin!2026"
+

@@ -1,0 +1,35 @@
+---
+# roles/common/tasks/packages.yml
+
+- name: Install baseline packages with retry and error handling
+  block:
+    - name: Update apt cache and install baseline packages
+      ansible.builtin.apt:
+        name: "{{ common_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 180
+      register: apt_install_result
+      retries: 3
+      delay: 10
+      until: apt_install_result is succeeded
+
+    - name: Ensure unattended-upgrades service is enabled
+      ansible.builtin.service:
+        name: unattended-upgrades
+        state: started
+        enabled: true
+  rescue:
+    - name: Fix interrupted dpkg configuration and retry apt update
+      ansible.builtin.command:
+        cmd: dpkg --configure -a
+      changed_when: true
+
+    - name: Retry installing baseline packages after recovery
+      ansible.builtin.apt:
+        name: "{{ common_packages }}"
+        state: present
+        update_cache: true
+        lock_timeout: 180
+

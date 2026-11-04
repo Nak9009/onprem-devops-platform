@@ -1,0 +1,27 @@
+---
+# playbooks/site.yml
+# Master Orchestration Playbook for On-Premises DevOps Platform
+# Executes phased playbooks in dependency order.
+
+- name: "Phase 1/2: Common OS Baseline & Hardening"
+  ansible.builtin.import_playbook: common.yml
+  tags: [phase1, phase2, common]
+
+# Subsequent phases will be enabled as their playbooks and roles are implemented:
+# - name: "Phase 3: DevOps Core Services (GitLab, Jenkins, Nexus, MinIO)"
+#   ansible.builtin.import_playbook: gitlab.yml
+# - ansible.builtin.import_playbook: nexus.yml
+# - ansible.builtin.import_playbook: minio.yml
+# - ansible.builtin.import_playbook: jenkins.yml
+#
+# - name: "Phase 4: Kubernetes, Calico, Rancher, and Argo CD"
+#   ansible.builtin.import_playbook: kubernetes.yml
+# - ansible.builtin.import_playbook: calico.yml
+# - ansible.builtin.import_playbook: rancher.yml
+# - ansible.builtin.import_playbook: argocd.yml
+#
+# - name: "Phase 6: Monitoring, Logging, and Security Hardening"
+#   ansible.builtin.import_playbook: monitoring.yml
+# - ansible.builtin.import_playbook: logging.yml
+# - ansible.builtin.import_playbook: security.yml
+

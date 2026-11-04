@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+# Managed by Ansible role: common
+127.0.0.1 localhost
+127.0.1.1 {{ inventory_hostname }}.{{ common_domain }} {{ inventory_hostname }}
+
+# IPv6 loopback
+::1 ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+# DevOps Platform Cluster Inventory Resolution
+{% for host in groups['all'] | sort %}
+{% set host_ip = hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address'] | default('')) %}
+{% if host_ip | length > 0 %}
+{{ host_ip }} {{ host }}.{{ common_domain }} {{ host }}{% if host in groups.get('gitlab', []) %} {{ gitlab_domain }}{% endif %}{% if host in groups.get('jenkins', []) %} {{ jenkins_domain }}{% endif %}{% if host in groups.get('nexus', []) %} {{ nexus_domain }} {{ docker_registry_domain }}{% endif %}{% if host in groups.get('rancher', []) %} {{ rancher_domain }}{% endif %}{% if host in groups.get('monitoring', []) %} {{ prometheus_domain }} {{ grafana_domain }} {{ loki_domain }}{% endif %}{% if host in groups.get('minio', []) %} {{ minio_domain }} {{ minio_console_domain }}{% endif %}
+
+{% endif %}
+{% endfor %}
+

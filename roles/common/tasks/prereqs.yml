@@ -1,0 +1,27 @@
+---
+# roles/common/tasks/prereqs.yml
+
+- name: Assert target operating system is Ubuntu 24.04 LTS
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version == (os_release_supported | default("24.04"))
+    fail_msg: >-
+      Unsupported OS detected: {{ ansible_distribution }} {{ ansible_distribution_version }}.
+      This platform requires Ubuntu Server {{ os_release_supported | default('24.04') }} LTS.
+    success_msg: >-
+      Verified OS: {{ ansible_distribution }} {{ ansible_distribution_version }} ({{ ansible_architecture }})
+
+- name: Assert minimum CPU and Memory resources on node
+  ansible.builtin.assert:
+    that:
+      - ansible_processor_vcpus >= (min_cpu_cores | default(1) | int)
+      - ansible_memtotal_mb >= (min_memory_mb | default(1500) | int)
+    fail_msg: >-
+      Node {{ inventory_hostname }} has insufficient resources:
+      vCPUs={{ ansible_processor_vcpus }} (min {{ min_cpu_cores | default(1) }}),
+      RAM={{ ansible_memtotal_mb }}MB (min {{ min_memory_mb | default(1500) }}MB).
+    success_msg: >-
+      Resource check passed on {{ inventory_hostname }}:
+      {{ ansible_processor_vcpus }} vCPUs, {{ ansible_memtotal_mb }} MB RAM.
+

@@ -1,0 +1,31 @@
+---
+# roles/common/tasks/main.yml
+
+- name: Validate OS and hardware prerequisites
+  ansible.builtin.import_tasks: prereqs.yml
+  tags: [common, prereqs]
+
+- name: Configure hostname and /etc/hosts resolution
+  ansible.builtin.import_tasks: hosts.yml
+  tags: [common, hosts, dns]
+
+- name: Install baseline system packages and updates
+  ansible.builtin.import_tasks: packages.yml
+  tags: [common, packages]
+
+- name: Configure timezone, NTP, kernel modules, sysctl, swap, and ulimits
+  ansible.builtin.import_tasks: system.yml
+  tags: [common, system, kernel]
+
+- name: Configure SSH access and daemon hardening
+  ansible.builtin.import_tasks: ssh.yml
+  tags: [common, ssh, security]
+
+- name: Configure UFW host firewall baseline
+  ansible.builtin.import_tasks: firewall.yml
+  tags: [common, firewall, security]
+
+- name: Run post-configuration validation checks
+  ansible.builtin.import_tasks: validate.yml
+  tags: [common, validate]
+

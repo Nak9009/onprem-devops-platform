@@ -1,0 +1,17 @@
+---
+# inventories/production/group_vars/vault.yml.example
+# Copy to inventories/production/group_vars/vault.yml and encrypt with:
+#   ansible-vault encrypt inventories/production/group_vars/vault.yml
+# DO NOT commit unencrypted production credentials to Git.
+
+vault_gitlab_root_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_jenkins_admin_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_nexus_admin_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_rancher_bootstrap_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_argocd_admin_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_minio_root_user: "<REPLACE_WITH_STRONG_ADMIN_USER>"
+vault_minio_root_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_grafana_admin_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_postgres_password: "<REPLACE_WITH_STRONG_SECRET>"
+vault_sonarqube_admin_password: "<REPLACE_WITH_STRONG_SECRET>"
+

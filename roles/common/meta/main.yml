@@ -1,0 +1,14 @@
+---
+# roles/common/meta/main.yml
+galaxy_info:
+  role_name: common
+  author: DevOps Platform Architecture Team
+  description: Base Ubuntu 24.04 LTS configuration, kernel tuning, SSH hardening, NTP, DNS hosts, and firewall baseline
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+dependencies: []
+

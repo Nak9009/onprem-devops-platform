@@ -1,0 +1,37 @@
+---
+# roles/common/tasks/validate.yml
+
+- name: Flush handlers before running validation checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify Chrony NTP service is active
+  ansible.builtin.command:
+    cmd: systemctl is-active chrony
+  register: chrony_status
+  changed_when: false
+  failed_when: chrony_status.stdout.strip() != "active"
+
+- name: Verify ipv4 forwarding is enabled in kernel
+  ansible.builtin.command:
+    cmd: sysctl -n net.ipv4.ip_forward
+  register: ip_forward_val
+  changed_when: false
+  failed_when: ip_forward_val.stdout.strip() != "1"
+
+- name: Verify br_netfilter module is loaded
+  ansible.builtin.shell:
+    cmd: lsmod | grep -w br_netfilter
+  register: br_netfilter_check
+  changed_when: false
+  failed_when: br_netfilter_check.rc != 0
+
+- name: Display node baseline readiness summary
+  ansible.builtin.debug:
+    msg: >-
+      [PASS] {{ inventory_hostname }} ({{ ansible_default_ipv4.address | default(ansible_host) }})
+      | OS: Ubuntu {{ ansible_distribution_version }}
+      | Timezone: {{ common_timezone }}
+      | NTP: {{ chrony_status.stdout }}
+      | IP Forward: {{ ip_forward_val.stdout }}
+      | Swap MB: {{ ansible_swaptotal_mb }}
+

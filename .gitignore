@@ -1,0 +1,42 @@
+# Ansible
+*.retry
+.vault_pass
+.vault_pass.txt
+inventories/**/group_vars/vault.yml
+inventories/**/host_vars/*vault*.yml
+.ansible/
+ansible.log
+
+# Multipass generated files & SSH keys
+multipass/.ssh/
+multipass/cloud-init-rendered.yaml
+multipass/.state/
+inventories/local/hosts.generated.yml
+
+# Kubernetes & Kubeconfig
+kubeconfig
+*.kubeconfig
+.kube/
+
+# TLS Certificates & Private Keys
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+tls/
+
+# OS & Editor files
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary / Scratch files
+tmp/
+.tmp/
+*.bak
+*.log
+

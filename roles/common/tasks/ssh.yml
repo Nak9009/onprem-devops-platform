@@ -1,0 +1,64 @@
+---
+# roles/common/tasks/ssh.yml
+
+- name: Ensure admin group exists
+  ansible.builtin.group:
+    name: "{{ common_admin_user }}"
+    state: present
+
+- name: Ensure admin user exists with passwordless sudo
+  ansible.builtin.user:
+    name: "{{ common_admin_user }}"
+    group: "{{ common_admin_user }}"
+    groups: sudo
+    append: true
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Configure passwordless sudo for admin user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ common_admin_user }}"
+    content: "{{ common_admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Check if local SSH public key exists on Ansible controller
+  ansible.builtin.stat:
+    path: "{{ ssh_public_key_path }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: controller_ssh_pubkey
+
+- name: Authorize SSH public key for admin user
+  ansible.posix.authorized_key:
+    user: "{{ common_admin_user }}"
+    state: present
+    key: "{{ lookup('file', ssh_public_key_path) }}"
+  when: controller_ssh_pubkey.stat.exists | default(false)
+  no_log: true
+
+- name: Harden SSH daemon configuration
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    validate: "sshd -t -f %s"
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: "PermitRootLogin {{ common_ssh_permit_root_login }}" }
+    - { regexp: '^#?PasswordAuthentication', line: "PasswordAuthentication {{ 'no' if (common_ssh_disable_password_auth | bool) else 'yes' }}" }
+    - { regexp: '^#?PubkeyAuthentication', line: "PubkeyAuthentication yes" }
+    - { regexp: '^#?X11Forwarding', line: "X11Forwarding no" }
+    - { regexp: '^#?MaxAuthTries', line: "MaxAuthTries 4" }
+  notify: Restart ssh
+
+- name: Ensure fail2ban is running and enabled
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true
+

@@ -1,0 +1,99 @@
+---
+# inventories/local/group_vars/all.yml
+# Local Multipass Testing Environment Variables
+
+environment: local
+deployment_mode: multipass
+local_profile: "{{ lookup('env', 'MULTIPASS_PROFILE') | default('minimal', true) }}"
+
+# System & Regional Settings
+domain: devops.local
+timezone: Asia/Phnom_Penh
+locale: en_US.UTF-8
+ntp_servers:
+  - 0.ubuntu.pool.ntp.org
+  - 1.ubuntu.pool.ntp.org
+
+# SSH & Admin User Settings
+admin_user: ansible
+ssh_port: 22
+ssh_disable_password_auth: true
+ssh_permit_root_login: "no"
+ssh_public_key_path: "{{ playbook_dir }}/../multipass/.ssh/id_ed25519.pub"
+
+# Host Firewall (UFW)
+ufw_enabled: true
+ufw_default_incoming_policy: deny
+ufw_default_outgoing_policy: allow
+management_subnet: "192.168.64.0/24"
+
+# Pinned Software Versions (Verified for Ubuntu 24.04 LTS Noble)
+os_release_supported: "24.04"
+containerd_version: "1.7.24-0ubuntu1~24.04.2"
+docker_ce_version: "5:27.4.1-1~ubuntu.24.04~noble"
+kubernetes_version: "1.31.4"
+kubernetes_apt_version: "1.31.4-1.1"
+kubernetes_minor_channel: "v1.31"
+calico_version: "v3.29.1"
+gitlab_version: "17.7.1-ce.0"
+jenkins_version: "2.479.3"
+java_package: "openjdk-21-jre-headless"
+nexus_version: "3.75.1-01"
+rancher_version: "v2.10.1"
+argocd_version: "v2.13.2"
+minio_version: "RELEASE.2024-12-18T13-15-44Z"
+prometheus_version: "2.53.3"
+node_exporter_version: "1.8.2"
+alertmanager_version: "0.27.0"
+grafana_version: "11.4.0"
+loki_version: "3.3.2"
+promtail_version: "3.3.2"
+trivy_version: "0.58.1"
+sonarqube_version: "10.8.1-community"
+vault_version: "1.18.3"
+
+# Kubernetes Networking (Verified non-overlapping with Multipass 192.168.64.0/24)
+pod_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+cluster_dns_ip: "10.96.0.10"
+cluster_name: "onprem-local-k8s"
+k8s_single_node_allow_workloads: false
+
+# Service FQDNs
+gitlab_domain: "gitlab.{{ domain }}"
+jenkins_domain: "jenkins.{{ domain }}"
+nexus_domain: "nexus.{{ domain }}"
+docker_registry_domain: "registry.{{ domain }}"
+rancher_domain: "rancher.{{ domain }}"
+argocd_domain: "argocd.{{ domain }}"
+minio_domain: "minio.{{ domain }}"
+minio_console_domain: "s3-console.{{ domain }}"
+prometheus_domain: "prometheus.{{ domain }}"
+grafana_domain: "grafana.{{ domain }}"
+loki_domain: "loki.{{ domain }}"
+sonarqube_domain: "sonar.{{ domain }}"
+vault_domain: "vault.{{ domain }}"
+
+# Service Ports
+gitlab_http_port: 80
+gitlab_https_port: 443
+gitlab_ssh_port: 2222
+jenkins_http_port: 8080
+nexus_http_port: 8081
+nexus_docker_hosted_port: 5000
+nexus_docker_group_port: 5001
+rancher_http_port: 80
+rancher_https_port: 443
+minio_api_port: 9000
+minio_console_port: 9001
+prometheus_port: 9090
+grafana_port: 3000
+loki_port: 3100
+node_exporter_port: 9100
+
+# Minimum Resource Guardrails (for local testing VMs)
+min_cpu_cores: 1
+min_memory_mb: 1500
+min_disk_gb: 15
+enable_swap_for_k8s: false
+

@@ -1,0 +1,100 @@
+---
+# inventories/production/group_vars/all.yml
+# Production VMware Environment Variables
+
+environment: production
+deployment_mode: vmware
+
+# System & Regional Settings
+domain: internal.example.com
+timezone: Asia/Phnom_Penh
+locale: en_US.UTF-8
+ntp_servers:
+  - ntp1.internal.example.com
+  - ntp2.internal.example.com
+
+# SSH & Admin User Settings
+admin_user: ansible
+ssh_port: 22
+ssh_disable_password_auth: true
+ssh_permit_root_login: "no"
+ssh_public_key_path: "~/.ssh/id_ed25519.pub"
+
+# Host Firewall (UFW)
+ufw_enabled: true
+ufw_default_incoming_policy: deny
+ufw_default_outgoing_policy: allow
+management_subnet: "10.20.0.0/16"
+
+# Pinned Software Versions (Identical to Local Testing for Parity)
+os_release_supported: "24.04"
+containerd_version: "1.7.24-0ubuntu1~24.04.2"
+docker_ce_version: "5:27.4.1-1~ubuntu.24.04~noble"
+kubernetes_version: "1.31.4"
+kubernetes_apt_version: "1.31.4-1.1"
+kubernetes_minor_channel: "v1.31"
+calico_version: "v3.29.1"
+gitlab_version: "17.7.1-ce.0"
+jenkins_version: "2.479.3"
+java_package: "openjdk-21-jre-headless"
+nexus_version: "3.75.1-01"
+rancher_version: "v2.10.1"
+argocd_version: "v2.13.2"
+minio_version: "RELEASE.2024-12-18T13-15-44Z"
+prometheus_version: "2.53.3"
+node_exporter_version: "1.8.2"
+alertmanager_version: "0.27.0"
+grafana_version: "11.4.0"
+loki_version: "3.3.2"
+promtail_version: "3.3.2"
+trivy_version: "0.58.1"
+sonarqube_version: "10.8.1-community"
+vault_version: "1.18.3"
+
+# Kubernetes Networking (Confirm non-overlapping with corporate VLANs 10.20.0.0/16)
+pod_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+cluster_dns_ip: "10.96.0.10"
+cluster_name: "onprem-prod-k8s"
+k8s_control_plane_endpoint: "k8s-api.{{ domain }}:6443"
+k8s_api_vip: "10.20.20.20"
+k8s_single_node_allow_workloads: false
+
+# Service FQDNs
+gitlab_domain: "gitlab.{{ domain }}"
+jenkins_domain: "jenkins.{{ domain }}"
+nexus_domain: "nexus.{{ domain }}"
+docker_registry_domain: "registry.{{ domain }}"
+rancher_domain: "rancher.{{ domain }}"
+argocd_domain: "argocd.{{ domain }}"
+minio_domain: "minio.{{ domain }}"
+minio_console_domain: "s3-console.{{ domain }}"
+prometheus_domain: "prometheus.{{ domain }}"
+grafana_domain: "grafana.{{ domain }}"
+loki_domain: "loki.{{ domain }}"
+sonarqube_domain: "sonar.{{ domain }}"
+vault_domain: "vault.{{ domain }}"
+
+# Service Ports
+gitlab_http_port: 80
+gitlab_https_port: 443
+gitlab_ssh_port: 2222
+jenkins_http_port: 8080
+nexus_http_port: 8081
+nexus_docker_hosted_port: 5000
+nexus_docker_group_port: 5001
+rancher_http_port: 80
+rancher_https_port: 443
+minio_api_port: 9000
+minio_console_port: 9001
+prometheus_port: 9090
+grafana_port: 3000
+loki_port: 3100
+node_exporter_port: 9100
+
+# Minimum Resource Guardrails (Production)
+min_cpu_cores: 2
+min_memory_mb: 3800
+min_disk_gb: 40
+enable_swap_for_k8s: false
+
