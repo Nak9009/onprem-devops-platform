@@ -4,6 +4,37 @@ Each directory in `manual-install/` contains a dedicated **step-by-step manual i
 
 ---
 
+## Global Environment (`platform.env`) & Master CLI (`devops-cli.sh`)
+
+All 15 per-server installers share a single global configuration file and master CLI:
+
+- **Global Environment File:** [`manual-install/platform.env`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/platform.env) — centralizes all VLAN/server IPs, floating VIPs, domain names, pinned software versions, and bootstrap credentials. Automatically sourced by every `*/install.sh` script.
+- **Unified Master CLI:** [`manual-install/devops-cli.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/devops-cli.sh) — runs local installs, remote SSH installs, operator CLI setup, and live 3-layer health checks.
+
+```bash
+# 1. List all 15 server modules, layers, and configured target IPs from platform.env
+./manual-install/devops-cli.sh list
+
+# 2. View active global variables and pinned versions
+./manual-install/devops-cli.sh env
+
+# 3. Install a server module locally on the current Ubuntu 24.04 machine
+./manual-install/devops-cli.sh install common
+./manual-install/devops-cli.sh install gitlab
+
+# 4. Push platform.env + module installer to a remote server over SSH and execute it
+./manual-install/devops-cli.sh remote-install common ansible@10.20.20.10
+./manual-install/devops-cli.sh remote-install gitlab ansible@10.20.20.10
+
+# 5. Install all operator client CLIs (kubectl, helm, argocd, rancher, calicoctl, glab, mc, logcli, trivy, vault, psql, redis-cli) on a Bastion/Admin host
+./manual-install/devops-cli.sh install-clis
+
+# 6. Check live HTTP/TCP health across all Layer 1, Layer 2, and Layer 3 endpoints
+./manual-install/devops-cli.sh status
+```
+
+---
+
 ## Directory Structure & 3-Layer Server Mapping
 
 | Layer | Server Folder | Target Server(s) | Installed Services & Versions | Installed CLI Tools |

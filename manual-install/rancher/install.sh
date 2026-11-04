@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 ARCH="$(dpkg --print-architecture)"
 RANCHER_VER="${RANCHER_VER:-v2.10.1}"
 RANCHER_CLI_VER="${RANCHER_CLI_VER:-v2.9.0}"

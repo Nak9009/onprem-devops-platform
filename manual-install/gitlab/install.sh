@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 GITLAB_VER="${GITLAB_VER:-17.7.1-ce.0}"
 GITLAB_URL="${GITLAB_URL:-http://$(hostname -I | awk '{print $1}')}"
 GITLAB_ROOT_PASS="${GITLAB_ROOT_PASS:-ChangeMe_GitLabRootPass_2026!}"

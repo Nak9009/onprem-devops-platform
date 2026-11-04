@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 PG_VER="${PG_VER:-16}"
 
 echo "[1/3] Installing PostgreSQL ${PG_VER}, Patroni, etcd, HAProxy, Keepalived, and pgBackRest..."

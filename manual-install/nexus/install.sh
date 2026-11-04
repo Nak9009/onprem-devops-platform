@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 NEXUS_VER="${NEXUS_VER:-3.75.1-01}"
 JVM_HEAP="${JVM_HEAP:-1200m}"
 

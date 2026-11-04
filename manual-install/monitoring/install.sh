@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 ARCH="$(dpkg --print-architecture)"
 PROM_VER="${PROM_VER:-2.53.3}"
 GRAFANA_VER="${GRAFANA_VER:-11.4.0}"

@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 ARCH="$(dpkg --print-architecture)"
 LOKI_VER="${LOKI_VER:-3.3.2}"
 LOKI_SERVER_IP="${LOKI_SERVER_IP:-127.0.0.1}"

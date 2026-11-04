@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 ARCH="$(dpkg --print-architecture)"
 MINIO_VER="${MINIO_VER:-RELEASE.2024-12-18T13-15-44Z}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"

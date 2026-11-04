@@ -5,6 +5,12 @@
 # ==============================================================================
 set -euo pipefail
 
+# Load global platform.env if present
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
 JENKINS_VER="${JENKINS_VER:-2.479.3}"
 TRIVY_VER="${TRIVY_VER:-0.58.1}"
 KUBECTL_VER="${KUBECTL_VER:-v1.31.4}"
