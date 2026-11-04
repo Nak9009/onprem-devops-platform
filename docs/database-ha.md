@@ -1,14 +1,16 @@
 # PostgreSQL 16 High-Availability Architecture (`pg-db1`, `pg-db2`, `pg-db3`)
 
-## 1. Architectural Overview
+## 1. Architectural Overview (5-VM Production HA Topology: `2x HA LB` + `3x HA DB`)
 
-All production operational and business databases run **outside Kubernetes** on three dedicated Ubuntu 24.04 virtual machines in **VLAN 50 (`10.20.50.0/24`)**:
+All production operational and business databases run **outside Kubernetes** on **5 dedicated Ubuntu 24.04 virtual machines** in **VLAN 50 (`10.20.50.0/24`)** — **2 HA Load Balancer VMs (`pg-lb1`, `pg-lb2`)** fronting **3 PostgreSQL HA Database VMs (`pg-db1`, `pg-db2`, `pg-db3`)**:
 
-| Hostname | Initial Role | Example IP | Replication Mode | Patroni / etcd Role |
+| Hostname | Tier & Initial Role | Example IP | vCPU / RAM | Services & Responsibility |
 | :--- | :--- | :--- | :--- | :--- |
-| **`pg-db1`** | **PostgreSQL Leader (Primary)** | `10.20.50.11` | Accepts all Read-Write transactions | Patroni Leader + etcd voting member |
-| **`pg-db2`** | **Synchronous Standby** | `10.20.50.12` | Synchronous WAL commit (`synchronous_commit = on`, `RPO = 0`) | Failover Candidate (`priority: 100`) + etcd voting member |
-| **`pg-db3`** | **Asynchronous Replica** | `10.20.50.13` | Asynchronous streaming replication | Failover Candidate (`priority: 90`) + etcd voting member |
+| **`pg-lb1`** | **HA Load Balancer 1 (`MASTER` VIP)** | `10.20.50.8` (VIP `.10`) | 2 vCPU / 4 GB | Keepalived (`MASTER` for VIP `10.20.50.10`) + HAProxy (`:5432` RW, `:5433` RO, `:7000` Stats) |
+| **`pg-lb2`** | **HA Load Balancer 2 (`BACKUP` VIP)** | `10.20.50.9` (VIP `.10`) | 2 vCPU / 4 GB | Keepalived (`BACKUP` for VIP `10.20.50.10`) + HAProxy (`:5432` RW, `:5433` RO, `:7000` Stats) |
+| **`pg-db1`** | **PostgreSQL Leader (Primary)** | `10.20.50.11` | 4–8 vCPU / 16–32 GB | PostgreSQL 16 Read-Write Primary + Patroni (`:8008`) + etcd voter + `pgBackRest` |
+| **`pg-db2`** | **Synchronous Standby** | `10.20.50.12` | 4–8 vCPU / 16–32 GB | Synchronous WAL commit (`synchronous_commit = on`, `RPO = 0`) + Patroni (`priority: 100`) + etcd voter |
+| **`pg-db3`** | **Asynchronous Replica** | `10.20.50.13` | 4–8 vCPU / 16–32 GB | Asynchronous streaming replica + Patroni (`priority: 90`) + etcd 3rd quorum voter |
 
 ---
 

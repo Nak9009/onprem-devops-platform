@@ -1,9 +1,13 @@
-# PostgreSQL 16 HA (`pg-db1`, `pg-db2`, `pg-db3`) Manual Installation & CLI Guide (`postgresql-ha`)
+# PostgreSQL 16 HA (5 VMs: `2x pg-lb` + `3x pg-db`) Manual Installation & CLI Guide (`postgresql-ha`)
 
-- **Target Hosts:**
-  - `pg-db1` (`10.20.50.11`) — **PostgreSQL Leader**
-  - `pg-db2` (`10.20.50.12`) — **Synchronous Standby** (`RPO = 0`)
-  - `pg-db3` (`10.20.50.13`) — **Asynchronous Replica**
+- **Target Hosts (5 VMs Total in `VLAN 50`):**
+  - **2 × HA Load Balancer VMs (`postgresql_lb`):**
+    - `pg-lb1` (`10.20.50.8`) — **HAProxy + Keepalived `MASTER`** (owns VIP `10.20.50.10`)
+    - `pg-lb2` (`10.20.50.9`) — **HAProxy + Keepalived `BACKUP`** (automatic VIP failover)
+  - **3 × PostgreSQL HA Database VMs (`postgresql_ha`):**
+    - `pg-db1` (`10.20.50.11`) — **PostgreSQL Leader** (Patroni + etcd voter)
+    - `pg-db2` (`10.20.50.12`) — **Synchronous Standby** (`RPO = 0`, Patroni + etcd voter)
+    - `pg-db3` (`10.20.50.13`) — **Asynchronous Replica** (Patroni + etcd 3rd voter)
 - **Versions:** PostgreSQL `16`, Patroni `3.3.x`, `etcd`, `haproxy`, `keepalived`, `pgBackRest` `2.52.x`
 - **Installed CLIs:** `psql`, `patronictl`, `pgbackrest`, `etcdctl`
 - **Automated Script:** [`manual-install/postgresql-ha/install.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/postgresql-ha/install.sh)
