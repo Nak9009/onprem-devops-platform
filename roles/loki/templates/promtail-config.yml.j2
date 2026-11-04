@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+# /etc/loki/promtail-config.yml - Promtail Log Shipper Configuration
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: "{{ loki_push_url }}"
+
+scrape_configs:
+  - job_name: varlogs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          host: "{{ inventory_hostname }}"
+          environment: "{{ environment | default('local') }}"
+          __path__: /var/log/*.log
+
+  - job_name: kubernetes-pods
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: kubernetes-pods
+          host: "{{ inventory_hostname }}"
+          environment: "{{ environment | default('local') }}"
+          __path__: /var/log/pods/*/*/*.log
+

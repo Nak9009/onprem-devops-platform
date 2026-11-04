@@ -1,0 +1,15 @@
+---
+# roles/loki/handlers/main.yml
+
+- name: Restart loki
+  ansible.builtin.systemd:
+    name: loki
+    state: restarted
+    daemon_reload: true
+
+- name: Restart promtail
+  ansible.builtin.systemd:
+    name: promtail
+    state: restarted
+    daemon_reload: true
+

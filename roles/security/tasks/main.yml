@@ -1,0 +1,175 @@
+---
+# roles/security/tasks/main.yml
+
+- name: Install Linux security auditing and hardening packages
+  ansible.builtin.apt:
+    name:
+      - auditd
+      - audispd-plugins
+      - fail2ban
+      - unattended-upgrades
+      - apt-listchanges
+      - unzip
+    state: present
+    update_cache: true
+  tags: [security, packages]
+
+- name: Configure auditd rules for identity, SSH, Docker, and Kubernetes configuration tracking
+  ansible.builtin.template:
+    src: audit-devops.rules.j2
+    dest: /etc/audit/rules.d/99-devops-security.rules
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart auditd
+  tags: [security, auditd]
+
+- name: Ensure auditd service is started and enabled
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true
+  tags: [security, auditd]
+
+- name: Apply network and kernel security sysctl hardening
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/98-devops-security.conf
+    content: |
+      # {{ ansible_managed }}
+      {% for k, v in security_sysctl_hardening.items() %}
+      {{ k }} = {{ v }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload security sysctl
+  tags: [security, sysctl]
+
+- name: Configure Fail2Ban SSH jail (/etc/fail2ban/jail.d/sshd.local)
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    content: |
+      # {{ ansible_managed }}
+      [sshd]
+      enabled = true
+      port = {{ ssh_port | default(22) }}
+      maxretry = 5
+      findtime = 10m
+      bantime = 1h
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+  tags: [security, fail2ban]
+
+- name: Deploy HashiCorp Vault ({{ vault_pinned_version }}) on designated security/monitoring nodes
+  when: "'security_services' in group_names or 'monitoring' in group_names"
+  block:
+    - name: Create vault system group and user
+      ansible.builtin.group:
+        name: vault
+        system: true
+        state: present
+
+    - name: Create vault user
+      ansible.builtin.user:
+        name: vault
+        group: vault
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ vault_data_dir }}"
+        create_home: false
+        state: present
+
+    - name: Create Vault config and Raft storage directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: vault
+        group: vault
+        mode: "0750"
+      loop:
+        - "{{ vault_config_dir }}"
+        - "{{ vault_data_dir }}"
+
+    - name: Check if Vault binary is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/vault
+      register: vault_bin_stat
+
+    - name: Download and extract HashiCorp Vault ({{ vault_pinned_version }})
+      when: not vault_bin_stat.stat.exists
+      block:
+        - name: Download Vault zip archive
+          ansible.builtin.get_url:
+            url: "{{ vault_zip_url }}"
+            dest: "/tmp/vault-{{ vault_pinned_version }}.zip"
+            mode: "0644"
+
+        - name: Extract Vault binary to /usr/local/bin
+          ansible.builtin.unarchive:
+            src: "/tmp/vault-{{ vault_pinned_version }}.zip"
+            dest: /usr/local/bin
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0755"
+
+    - name: Render /etc/vault.d/vault.hcl
+      ansible.builtin.template:
+        src: vault.hcl.j2
+        dest: "{{ vault_config_dir }}/vault.hcl"
+        owner: vault
+        group: vault
+        mode: "0640"
+      notify: Restart vault
+
+    - name: Create /etc/systemd/system/vault.service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vault.service
+        content: |
+          # {{ ansible_managed }}
+          [Unit]
+          Description=HashiCorp Vault Secret Management Server (v{{ vault_pinned_version }})
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=vault
+          Group=vault
+          ExecStart=/usr/local/bin/vault server -config={{ vault_config_dir }}/vault.hcl
+          ExecReload=/bin/kill --signal HUP $MAINPID
+          KillMode=process
+          KillSignal=SIGINT
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=65536
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart vault
+
+    - name: Open Vault API port ({{ vault_api_port }}) in UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ vault_api_port | string }}"
+        proto: tcp
+        comment: "HashiCorp Vault API and UI"
+      when: ufw_enabled | default(true) | bool
+
+    - name: Ensure Vault service is started and enabled
+      ansible.builtin.systemd:
+        name: vault
+        state: started
+        enabled: true
+        daemon_reload: true
+  tags: [security, vault]
+
+- name: Display Security Hardening status summary
+  ansible.builtin.debug:
+    msg: "[PASS] Security hardening (auditd, sysctl, fail2ban, Vault) applied on {{ inventory_hostname }}."
+  tags: [security, validate]
+

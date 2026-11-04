@@ -1,0 +1,20 @@
+---
+# playbooks/logging.yml
+# Deploys Grafana Loki on the 'monitoring' group and Promtail log shipper across all nodes.
+
+- name: Deploy Grafana Loki Centralized Log Aggregation & Promtail Agents
+  hosts: all
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: loki
+      tags: [loki, logging]
+

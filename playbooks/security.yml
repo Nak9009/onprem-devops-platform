@@ -1,0 +1,20 @@
+---
+# playbooks/security.yml
+# Applies Linux auditd rules, kernel network security sysctls, Fail2Ban SSH jails, and HashiCorp Vault.
+
+- name: Apply Platform Security Hardening and Secrets Management (HashiCorp Vault)
+  hosts: all
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: security
+      tags: [security, vault]
+

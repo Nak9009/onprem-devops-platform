@@ -1,0 +1,22 @@
+---
+# playbooks/monitoring.yml
+# Deploys Node Exporter across all nodes, and Prometheus + Grafana on the 'monitoring' group.
+
+- name: Deploy Prometheus Node Exporter, Prometheus Server, and Grafana Dashboards
+  hosts: all
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: prometheus
+      tags: [prometheus, monitoring]
+    - role: grafana
+      tags: [grafana, monitoring]
+

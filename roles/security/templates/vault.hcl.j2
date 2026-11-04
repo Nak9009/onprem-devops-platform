@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# /etc/vault.d/vault.hcl - HashiCorp Vault Production Configuration
+ui = true
+disable_mlock = true
+
+storage "raft" {
+  path    = "{{ vault_data_dir }}"
+  node_id = "{{ inventory_hostname }}"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:{{ vault_api_port }}"
+  tls_disable = "true"
+}
+
+api_addr     = "http://{{ ansible_default_ipv4.address | default('127.0.0.1') }}:{{ vault_api_port }}"
+cluster_addr = "https://{{ ansible_default_ipv4.address | default('127.0.0.1') }}:8201"
+

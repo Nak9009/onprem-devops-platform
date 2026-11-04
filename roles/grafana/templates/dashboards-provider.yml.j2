@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# /etc/grafana/provisioning/dashboards/devops-dashboards.yml
+apiVersion: 1
+
+providers:
+  - name: "DevOps Platform Dashboards"
+    orgId: 1
+    folder: "On-Premises DevOps Platform"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
+

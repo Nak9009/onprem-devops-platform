@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+# /etc/prometheus/prometheus.yml - Dynamic Inventory Scrape Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: "{{ environment | default('local') }}"
+    cluster: "{{ cluster_name | default('onprem-devops') }}"
+
+rule_files:
+  - "/etc/prometheus/rules/alert.rules.yml"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["127.0.0.1:{{ prometheus_web_port }}"]
+
+  - job_name: "node_exporter"
+    static_configs:
+      - targets:
+{% for host in groups['all'] | sort %}
+          - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ node_exporter_web_port }}"
+{% endfor %}
+
+  - job_name: "minio"
+    metrics_path: /minio/v2/metrics/cluster
+    scheme: http
+    static_configs:
+      - targets:
+{% for host in groups.get('minio', []) %}
+          - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ minio_api_port | default(9000) }}"
+{% endfor %}
+
+  - job_name: "loki"
+    static_configs:
+      - targets:
+{% for host in groups.get('monitoring', []) %}
+          - "{{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:{{ loki_port | default(3100) }}"
+{% endfor %}
+

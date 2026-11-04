@@ -1,0 +1,22 @@
+---
+# roles/security/defaults/main.yml
+
+vault_pinned_version: "{{ vault_version | default('1.18.3') }}"
+vault_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+vault_zip_url: "https://releases.hashicorp.com/vault/{{ vault_pinned_version }}/vault_{{ vault_pinned_version }}_linux_{{ vault_arch }}.zip"
+vault_api_port: 8200
+vault_data_dir: "/var/lib/vault"
+vault_config_dir: "/etc/vault.d"
+
+security_sysctl_hardening:
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.tcp_syncookies: 1
+  kernel.kptr_restrict: 2
+  kernel.dmesg_restrict: 1
+

@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+# /etc/grafana/provisioning/datasources/devops-datasources.yml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-main
+    access: proxy
+    url: "{{ grafana_prometheus_url }}"
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+
+  - name: Loki
+    type: loki
+    uid: loki-main
+    access: proxy
+    url: "{{ grafana_loki_url }}"
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000
+

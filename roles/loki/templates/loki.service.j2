@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# /etc/systemd/system/loki.service
+[Unit]
+Description=Grafana Loki Centralized Log Aggregation Server (v{{ loki_pinned_version }})
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User={{ loki_user }}
+Group={{ loki_group }}
+Type=simple
+ExecStart=/usr/local/bin/loki -config.file={{ loki_config_dir }}/loki-config.yml
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

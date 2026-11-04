@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+# /etc/audit/rules.d/99-devops-security.rules
+# Linux Audit Daemon Rules for Critical Identity, Sudoers, Docker, and Kubernetes Configs
+
+-D
+-b 8192
+-f 1
+
+# Monitor identity and privilege escalation files
+-w /etc/passwd -p wa -k identity_changes
+-w /etc/group -p wa -k identity_changes
+-w /etc/shadow -p wa -k identity_changes
+-w /etc/sudoers -p wa -k sudoers_changes
+-w /etc/sudoers.d/ -p wa -k sudoers_changes
+-w /etc/ssh/sshd_config -p wa -k sshd_config_changes
+
+# Monitor Kubernetes and Container Runtime configuration
+-w /etc/kubernetes/ -p wa -k k8s_config_changes
+-w /etc/containerd/ -p wa -k containerd_config_changes
+-w /etc/docker/ -p wa -k docker_config_changes
+-w /etc/gitlab/ -p wa -k gitlab_config_changes
+

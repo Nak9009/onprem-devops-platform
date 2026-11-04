@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# /etc/systemd/system/promtail.service
+[Unit]
+Description=Promtail Log Shipping Agent (v{{ promtail_pinned_version }})
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/usr/local/bin/promtail -config.file={{ loki_config_dir }}/promtail-config.yml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

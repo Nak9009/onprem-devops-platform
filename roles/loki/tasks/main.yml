@@ -1,0 +1,184 @@
+---
+# roles/loki/tasks/main.yml
+
+- name: Deploy Grafana Loki Server on 'monitoring' group nodes
+  when: "'monitoring' in group_names"
+  block:
+    - name: Create loki system group
+      ansible.builtin.group:
+        name: "{{ loki_group }}"
+        system: true
+        state: present
+
+    - name: Create loki system user
+      ansible.builtin.user:
+        name: "{{ loki_user }}"
+        group: "{{ loki_group }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ loki_data_dir }}"
+        create_home: false
+        state: present
+
+    - name: Create Loki configuration and storage directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ loki_user }}"
+        group: "{{ loki_group }}"
+        mode: "0750"
+      loop:
+        - "{{ loki_config_dir }}"
+        - "{{ loki_data_dir }}"
+        - "{{ loki_data_dir }}/chunks"
+        - "{{ loki_data_dir }}/rules"
+        - "{{ loki_data_dir }}/compactor"
+
+    - name: Check if Loki binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/loki
+      register: loki_bin_stat
+
+    - name: Download and extract pinned Loki binary ({{ loki_pinned_version }})
+      when: not loki_bin_stat.stat.exists
+      block:
+        - name: Download Loki zip archive
+          ansible.builtin.get_url:
+            url: "{{ loki_zip_url }}"
+            dest: "/tmp/loki-{{ loki_pinned_version }}.zip"
+            mode: "0644"
+
+        - name: Unarchive Loki binary
+          ansible.builtin.unarchive:
+            src: "/tmp/loki-{{ loki_pinned_version }}.zip"
+            dest: /tmp
+            remote_src: true
+
+        - name: Install Loki binary to /usr/local/bin/loki
+          ansible.builtin.copy:
+            src: "/tmp/loki-linux-{{ loki_arch }}"
+            dest: /usr/local/bin/loki
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0755"
+
+    - name: Render /etc/loki/loki-config.yml
+      ansible.builtin.template:
+        src: loki-config.yml.j2
+        dest: "{{ loki_config_dir }}/loki-config.yml"
+        owner: "{{ loki_user }}"
+        group: "{{ loki_group }}"
+        mode: "0640"
+      notify: Restart loki
+
+    - name: Render /etc/systemd/system/loki.service
+      ansible.builtin.template:
+        src: loki.service.j2
+        dest: /etc/systemd/system/loki.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart loki
+
+    - name: Open Loki HTTP API port ({{ loki_http_port }}) in UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ loki_http_port | string }}"
+        proto: tcp
+        comment: "Grafana Loki Log Ingestion and Query API"
+      when: ufw_enabled | default(true) | bool
+
+    - name: Ensure Loki service is started and enabled
+      ansible.builtin.systemd:
+        name: loki
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Flush handlers before Loki readiness validation
+      ansible.builtin.meta: flush_handlers
+
+    - name: Validate Loki /ready endpoint
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ loki_http_port }}/ready"
+        method: GET
+        status_code: 200
+      register: loki_ready_check
+      retries: 20
+      delay: 5
+      until: loki_ready_check.status == 200
+
+    - name: Display Loki readiness summary
+      ansible.builtin.debug:
+        msg: "[PASS] Grafana Loki v{{ loki_pinned_version }} is active on http://{{ loki_domain }}:{{ loki_http_port }}"
+  tags: [loki, server, validate]
+
+- name: Deploy Promtail Log Shipper across all platform nodes
+  block:
+    - name: Ensure /etc/loki and /var/lib/promtail directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ loki_config_dir }}"
+        - /var/lib/promtail
+
+    - name: Check if Promtail binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/promtail
+      register: promtail_bin_stat
+
+    - name: Download and extract pinned Promtail binary ({{ promtail_pinned_version }})
+      when: not promtail_bin_stat.stat.exists
+      block:
+        - name: Download Promtail zip archive
+          ansible.builtin.get_url:
+            url: "{{ promtail_zip_url }}"
+            dest: "/tmp/promtail-{{ promtail_pinned_version }}.zip"
+            mode: "0644"
+
+        - name: Unarchive Promtail binary
+          ansible.builtin.unarchive:
+            src: "/tmp/promtail-{{ promtail_pinned_version }}.zip"
+            dest: /tmp
+            remote_src: true
+
+        - name: Install Promtail binary to /usr/local/bin/promtail
+          ansible.builtin.copy:
+            src: "/tmp/promtail-linux-{{ loki_arch }}"
+            dest: /usr/local/bin/promtail
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0755"
+
+    - name: Render /etc/loki/promtail-config.yml
+      ansible.builtin.template:
+        src: promtail-config.yml.j2
+        dest: "{{ loki_config_dir }}/promtail-config.yml"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart promtail
+
+    - name: Render /etc/systemd/system/promtail.service
+      ansible.builtin.template:
+        src: promtail.service.j2
+        dest: /etc/systemd/system/promtail.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart promtail
+
+    - name: Ensure Promtail service is started and enabled
+      ansible.builtin.systemd:
+        name: promtail
+        state: started
+        enabled: true
+        daemon_reload: true
+  tags: [loki, promtail]
+

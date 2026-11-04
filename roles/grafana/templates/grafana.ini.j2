@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# /etc/grafana/grafana.ini
+[server]
+protocol = http
+http_addr = 0.0.0.0
+http_port = {{ grafana_web_port }}
+domain = {{ grafana_domain | default('grafana.devops.local') }}
+root_url = %(protocol)s://%(domain)s:%(http_port)s/
+
+[security]
+admin_user = {{ grafana_admin_user }}
+admin_password = {{ grafana_admin_secret }}
+disable_gravatar = true
+cookie_secure = false
+
+[users]
+allow_sign_up = false
+allow_org_create = false
+
+[auth.anonymous]
+enabled = false
+
+[analytics]
+reporting_enabled = false
+check_for_updates = false
+
