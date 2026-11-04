@@ -24,7 +24,7 @@
   ansible.builtin.copy:
     dest: /etc/modules-load.d/99-devops-k8s.conf
     content: |
-      # {{ ansible_managed }}
+      # Managed by Ansible
       {% for mod in common_kernel_modules %}
       {{ mod }}
       {% endfor %}

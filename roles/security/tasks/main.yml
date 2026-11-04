@@ -35,7 +35,7 @@
   ansible.builtin.copy:
     dest: /etc/sysctl.d/98-devops-security.conf
     content: |
-      # {{ ansible_managed }}
+      # Managed by Ansible
       {% for k, v in security_sysctl_hardening.items() %}
       {{ k }} = {{ v }}
       {% endfor %}
@@ -49,7 +49,7 @@
   ansible.builtin.copy:
     dest: /etc/fail2ban/jail.d/sshd.local
     content: |
-      # {{ ansible_managed }}
+      # Managed by Ansible
       [sshd]
       enabled = true
       port = {{ ssh_port | default(22) }}
@@ -128,7 +128,7 @@
       ansible.builtin.copy:
         dest: /etc/systemd/system/vault.service
         content: |
-          # {{ ansible_managed }}
+          # Managed by Ansible
           [Unit]
           Description=HashiCorp Vault Secret Management Server (v{{ vault_pinned_version }})
           After=network-online.target

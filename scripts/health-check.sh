@@ -45,7 +45,7 @@ echo " On-Premises DevOps Platform - Node Health Check (${ENV_NAME})"
 echo " Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "======================================================================"
 
-ansible all -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -b -m ansible.builtin.shell -a '
+ansible all -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -b -m ansible.builtin.shell -a '
   set -e
   OS_VER=$(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d "\"")
   UPTIME_STR=$(uptime -p)

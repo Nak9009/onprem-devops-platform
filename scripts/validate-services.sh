@@ -50,37 +50,37 @@ echo "======================================================================"
 
 validate_phase2() {
   echo ">>> [Phase 2] Validating OS Baseline, SSH Hardening, Kernel Sysctl, and Firewall..."
-  "${SCRIPT_DIR}/validate-network.sh" --env "${ENV_NAME}" "${LIMIT_ARGS[@]}"
-  "${SCRIPT_DIR}/health-check.sh" --env "${ENV_NAME}" "${LIMIT_ARGS[@]}"
+  "${SCRIPT_DIR}/validate-network.sh" --env "${ENV_NAME}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}
+  "${SCRIPT_DIR}/health-check.sh" --env "${ENV_NAME}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"}
 }
 
 validate_phase3() {
   echo ">>> [Phase 3] Validating DevOps Core Services (GitLab, Jenkins, Nexus, MinIO)..."
-  ansible gitlab -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible gitlab -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1/-/readiness status_code=200" -o
-  ansible jenkins -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible jenkins -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:8080/login status_code=200" -o
-  ansible nexus -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible nexus -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:8081/service/rest/v1/status status_code=200" -o
-  ansible minio -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible minio -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:9000/minio/health/live status_code=200" -o
 }
 
 validate_phase4() {
   echo ">>> [Phase 4] Validating Kubernetes Control Plane, Workers, Calico, Rancher, and Argo CD..."
-  ansible k8s_control_plane[0] -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -b -m ansible.builtin.shell \
+  ansible k8s_control_plane[0] -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -b -m ansible.builtin.shell \
     -a "kubectl get nodes -o wide && kubectl get pods -A"
-  ansible rancher -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible rancher -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=https://127.0.0.1/ping validate_certs=no status_code=200" -o
 }
 
 validate_phase6() {
   echo ">>> [Phase 6] Validating Monitoring & Logging Stack (Prometheus, Grafana, Loki)..."
-  ansible monitoring -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible monitoring -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:9090/-/healthy status_code=200" -o
-  ansible monitoring -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible monitoring -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:3000/api/health status_code=200" -o
-  ansible monitoring -i "${INVENTORY_FILE}" "${LIMIT_ARGS[@]}" -m ansible.builtin.uri \
+  ansible monitoring -i "${INVENTORY_FILE}" ${LIMIT_ARGS[@]+"${LIMIT_ARGS[@]}"} -m ansible.builtin.uri \
     -a "url=http://127.0.0.1:3100/ready status_code=200" -o
 }
 
