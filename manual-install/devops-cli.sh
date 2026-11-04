@@ -7,7 +7,20 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${PLATFORM_ENV_FILE:-${BASE_DIR}/platform.env}"
+TARGET_ENV="production"
+
+if [[ "${1:-}" == "-e" || "${1:-}" == "--env" ]]; then
+  TARGET_ENV="${2:-production}"
+  shift 2
+fi
+
+if [[ -n "${PLATFORM_ENV_FILE:-}" ]]; then
+  ENV_FILE="${PLATFORM_ENV_FILE}"
+elif [[ -f "${BASE_DIR}/${TARGET_ENV}.env" ]]; then
+  ENV_FILE="${BASE_DIR}/${TARGET_ENV}.env"
+else
+  ENV_FILE="${BASE_DIR}/platform.env"
+fi
 
 if [[ -f "${ENV_FILE}" ]]; then
   # shellcheck disable=SC1090

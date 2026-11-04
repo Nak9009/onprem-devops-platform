@@ -4,33 +4,38 @@ Each directory in `manual-install/` contains a dedicated **step-by-step manual i
 
 ---
 
-## Global Environment (`platform.env`) & Master CLI (`devops-cli.sh`)
+## Global Environment (`local.env` / `production.env`) & Master CLI (`devops-cli.sh`)
 
-All 15 per-server installers share a single global configuration file and master CLI:
+We provide dedicated guides and global environment files for **Local (Multipass)** and **Production (VMware vSphere)**:
 
-- **Global Environment File:** [`manual-install/platform.env`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/platform.env) — centralizes all VLAN/server IPs, floating VIPs, domain names, pinned software versions, and bootstrap credentials. Automatically sourced by every `*/install.sh` script.
-- **Unified Master CLI:** [`manual-install/devops-cli.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/devops-cli.sh) — runs local installs, remote SSH installs, operator CLI setup, and live 3-layer health checks.
+| Target Environment | Step-by-Step Deployment Guide | Global Environment File | CLI Flag |
+| :--- | :--- | :--- | :--- |
+| **Local (Multipass)** | [**`manual-install/LOCAL-MULTIPASS-GUIDE.md`**](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/LOCAL-MULTIPASS-GUIDE.md) | [`manual-install/local.env`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/local.env) | `./manual-install/devops-cli.sh --env local <cmd>` |
+| **Production (VMware vSphere)** | [**`manual-install/PRODUCTION-VMWARE-GUIDE.md`**](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/PRODUCTION-VMWARE-GUIDE.md) | [`manual-install/production.env`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/production.env) | `./manual-install/devops-cli.sh --env production <cmd>` |
 
 ```bash
-# 1. List all 15 server modules, layers, and configured target IPs from platform.env
-./manual-install/devops-cli.sh list
+# 1. List all 15 server modules and target IPs for Local (Multipass) or Production (VMware):
+./manual-install/devops-cli.sh --env local list
+./manual-install/devops-cli.sh --env production list
 
-# 2. View active global variables and pinned versions
-./manual-install/devops-cli.sh env
+# 2. View active global variables and pinned versions:
+./manual-install/devops-cli.sh --env local env
+./manual-install/devops-cli.sh --env production env
 
-# 3. Install a server module locally on the current Ubuntu 24.04 machine
-./manual-install/devops-cli.sh install common
-./manual-install/devops-cli.sh install gitlab
+# 3. Install a server module locally on the current Ubuntu 24.04 machine:
+./manual-install/devops-cli.sh --env local install common
+./manual-install/devops-cli.sh --env production install gitlab
 
-# 4. Push platform.env + module installer to a remote server over SSH and execute it
-./manual-install/devops-cli.sh remote-install common ansible@10.20.20.10
-./manual-install/devops-cli.sh remote-install gitlab ansible@10.20.20.10
+# 4. Push env + module installer to a remote server over SSH and execute it:
+./manual-install/devops-cli.sh --env local remote-install postgresql-ha ubuntu@192.168.252.17
+./manual-install/devops-cli.sh --env production remote-install gitlab ansible@10.20.20.10
 
-# 5. Install all operator client CLIs (kubectl, helm, argocd, rancher, calicoctl, glab, mc, logcli, trivy, vault, psql, redis-cli) on a Bastion/Admin host
-./manual-install/devops-cli.sh install-clis
+# 5. Install all operator client CLIs (kubectl, helm, argocd, rancher, calicoctl, glab, mc, logcli, trivy, vault, psql, redis-cli):
+./manual-install/devops-cli.sh --env production install-clis
 
-# 6. Check live HTTP/TCP health across all Layer 1, Layer 2, and Layer 3 endpoints
-./manual-install/devops-cli.sh status
+# 6. Check live HTTP/TCP health across all Layer 1, Layer 2, and Layer 3 endpoints:
+./manual-install/devops-cli.sh --env local status
+./manual-install/devops-cli.sh --env production status
 ```
 
 ---
