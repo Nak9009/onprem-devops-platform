@@ -1,0 +1,23 @@
+---
+# roles/gitlab/defaults/main.yml
+
+gitlab_package_name: "gitlab-ce"
+gitlab_pinned_version: "{{ gitlab_version | default('17.7.1-ce.0') }}"
+gitlab_external_url: "https://{{ gitlab_domain | default('gitlab.devops.local') }}"
+gitlab_ssh_host_port: "{{ gitlab_ssh_port | default(2222) }}"
+gitlab_http_host_port: "{{ gitlab_http_port | default(80) }}"
+gitlab_https_host_port: "{{ gitlab_https_port | default(443) }}"
+
+gitlab_initial_root_password: "{{ vault_gitlab_root_password | default('ChangeMe_LocalGitLabRoot!2026') }}"
+
+gitlab_ssl_dir: "/etc/gitlab/ssl"
+gitlab_ssl_cert: "{{ gitlab_ssl_dir }}/{{ gitlab_domain }}.crt"
+gitlab_ssl_key: "{{ gitlab_ssl_dir }}/{{ gitlab_domain }}.key"
+
+# Memory tuning based on environment (compact local 4GB vs production 16GB)
+gitlab_puma_workers: "{{ 2 if (environment | default('local')) == 'local' else 4 }}"
+gitlab_sidekiq_concurrency: "{{ 5 if (environment | default('local')) == 'local' else 15 }}"
+gitlab_prometheus_monitoring_enabled: "{{ false if (environment | default('local')) == 'local' else true }}"
+gitlab_backup_path: "/var/opt/gitlab/backups"
+gitlab_backup_keep_time: 604800
+

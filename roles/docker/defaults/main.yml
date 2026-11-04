@@ -1,0 +1,23 @@
+---
+# roles/docker/defaults/main.yml
+
+docker_edition: "ce"
+docker_version: "{{ docker_ce_version | default('5:27.4.1-1~ubuntu.24.04~noble') }}"
+docker_apt_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+docker_apt_url: "https://download.docker.com/linux/ubuntu"
+docker_gpg_url: "https://download.docker.com/linux/ubuntu/gpg"
+
+docker_daemon_options:
+  exec-opts:
+    - "native.cgroupdriver=systemd"
+  log-driver: "json-file"
+  log-opts:
+    max-size: "50m"
+    max-file: "3"
+  storage-driver: "overlay2"
+  live-restore: true
+  insecure-registries:
+    - "{{ docker_registry_domain | default('registry.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+    - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+    - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_group_port | default(5001) }}"
+

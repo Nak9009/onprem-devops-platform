@@ -1,0 +1,30 @@
+#!groovy
+// {{ ansible_managed }}
+// /var/lib/jenkins/init.groovy.d/01-security.groovy
+// Configures initial admin user, disables anonymous access, enables CSRF Crumb Issuer
+
+import jenkins.model.*
+import hudson.security.*
+import hudson.security.csrf.DefaultCrumbIssuer
+import jenkins.security.s2m.AdminWhitelistRule
+
+def instance = Jenkins.get()
+
+def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+if (hudsonRealm.getUser("{{ jenkins_admin_user }}") == null) {
+    hudsonRealm.createAccount("{{ jenkins_admin_user }}", "{{ jenkins_admin_password }}")
+    instance.setSecurityRealm(hudsonRealm)
+
+    def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+    strategy.setAllowAnonymousRead(false)
+    instance.setAuthorizationStrategy(strategy)
+}
+
+if (instance.getCrumbIssuer() == null) {
+    instance.setCrumbIssuer(new DefaultCrumbIssuer(true))
+}
+
+instance.setNumExecutors(2)
+instance.setSlaveAgentPort({{ jenkins_agent_port }})
+instance.save()
+

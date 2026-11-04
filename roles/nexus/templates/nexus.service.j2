@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+# /etc/systemd/system/nexus.service - Sonatype Nexus Repository OSS
+[Unit]
+Description=Sonatype Nexus Repository Manager ({{ nexus_pinned_version }})
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+ExecStartPre=-/usr/bin/docker rm -f nexus
+ExecStart=/usr/bin/docker run --rm --name nexus \
+  -p {{ nexus_web_port }}:8081 \
+  -p {{ nexus_docker_hosted_port_val }}:5000 \
+  -p {{ nexus_docker_group_port_val }}:5001 \
+  -e INSTALL4J_ADD_VM_PARAMS="-Xms{{ nexus_jvm_min_heap }} -Xmx{{ nexus_jvm_max_heap }} -XX:MaxDirectMemorySize={{ nexus_jvm_direct_mem }} -Djava.util.prefs.userRoot=/nexus-data/javaprefs" \
+  -v {{ nexus_data_dir }}:/nexus-data \
+  {{ nexus_container_image }}
+ExecStop=/usr/bin/docker stop -t 60 nexus
+
+[Install]
+WantedBy=multi-user.target
+

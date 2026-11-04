@@ -1,0 +1,25 @@
+---
+# roles/minio/defaults/main.yml
+
+minio_release: "{{ minio_version | default('RELEASE.2024-12-18T13-15-44Z') }}"
+minio_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+minio_binary_url: "https://dl.min.io/server/minio/release/linux-{{ minio_arch }}/archive/minio.{{ minio_release }}"
+minio_mc_url: "https://dl.min.io/client/mc/release/linux-{{ minio_arch }}/mc"
+
+minio_system_user: "minio-user"
+minio_system_group: "minio-user"
+minio_storage_dir: "/var/lib/minio/data"
+minio_config_dir: "/etc/minio"
+
+minio_s3_port: "{{ minio_api_port | default(9000) }}"
+minio_web_port: "{{ minio_console_port | default(9001) }}"
+
+minio_root_username: "{{ vault_minio_root_user | default('minioadmin') }}"
+minio_root_secret: "{{ vault_minio_root_password | default('ChangeMe_LocalMinIORoot!2026') }}"
+
+minio_default_buckets:
+  - loki-chunks
+  - loki-ruler
+  - devops-backups
+  - devops-artifacts
+

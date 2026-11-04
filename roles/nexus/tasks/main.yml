@@ -1,0 +1,150 @@
+---
+# roles/nexus/tasks/main.yml
+
+- name: Validate hardware prerequisites for Nexus Repository
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= 2500
+    fail_msg: "Nexus Repository requires at least 2.5 GB RAM. Detected: {{ ansible_memtotal_mb }} MB."
+  tags: [nexus, prereqs]
+
+- name: Ensure persistent Nexus data directory exists with UID/GID 200
+  ansible.builtin.file:
+    path: "{{ nexus_data_dir }}"
+    state: directory
+    owner: "{{ nexus_uid }}"
+    group: "{{ nexus_gid }}"
+    mode: "0755"
+  tags: [nexus, storage]
+
+- name: Open Nexus UI and Docker Registry ports in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "{{ nexus_web_port }}", comment: "Nexus Web UI and REST API" }
+    - { port: "{{ nexus_docker_hosted_port_val }}", comment: "Nexus Docker Hosted Registry" }
+    - { port: "{{ nexus_docker_group_port_val }}", comment: "Nexus Docker Group Registry" }
+  when: ufw_enabled | default(true) | bool
+  tags: [nexus, firewall]
+
+- name: Pull pinned Sonatype Nexus container image
+  ansible.builtin.command:
+    cmd: "docker pull {{ nexus_container_image }}"
+  register: nexus_pull_out
+  changed_when: "'Downloaded newer image' in nexus_pull_out.stdout"
+  retries: 3
+  delay: 10
+  until: nexus_pull_out is succeeded
+  tags: [nexus, packages]
+
+- name: Configure Nexus systemd service unit
+  ansible.builtin.template:
+    src: nexus.service.j2
+    dest: /etc/systemd/system/nexus.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart nexus
+  tags: [nexus, config]
+
+- name: Ensure Nexus service is started and enabled
+  ansible.builtin.systemd:
+    name: nexus
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags: [nexus, service]
+
+- name: Flush handlers before Nexus health check
+  ansible.builtin.meta: flush_handlers
+  tags: [nexus, validate]
+
+- name: Wait for Nexus REST API status endpoint to become ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ nexus_web_port }}/service/rest/v1/status"
+    method: GET
+    status_code: 200
+  register: nexus_status_check
+  retries: 36
+  delay: 10
+  until: nexus_status_check.status == 200
+  tags: [nexus, validate]
+
+- name: Check if initial admin.password file exists (first-boot bootstrap)
+  ansible.builtin.stat:
+    path: "{{ nexus_data_dir }}/admin.password"
+  register: nexus_initial_pass_file
+  tags: [nexus, config]
+
+- name: Rotate initial Nexus admin password to Vault-managed secret and enable Docker bearer realm
+  when: nexus_initial_pass_file.stat.exists
+  no_log: true
+  block:
+    - name: Read initial generated admin password
+      ansible.builtin.slurp:
+        src: "{{ nexus_data_dir }}/admin.password"
+      register: nexus_init_pass_raw
+
+    - name: Update Nexus admin user password via REST API
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nexus_web_port }}/service/rest/v1/security/users/admin/change-password"
+        method: PUT
+        user: "admin"
+        password: "{{ nexus_init_pass_raw.content | b64decode | trim }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: "text/plain"
+        body: "{{ nexus_admin_password }}"
+        status_code: [200, 204]
+
+    - name: Disable anonymous access in Nexus for security compliance
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nexus_web_port }}/service/rest/v1/security/anonymous"
+        method: PUT
+        user: "admin"
+        password: "{{ nexus_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          enabled: false
+          userId: "anonymous"
+          realmName: "NexusAuthorizingRealm"
+        status_code: 200
+
+    - name: Create Docker Hosted repository on port {{ nexus_docker_hosted_port_val }}
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nexus_web_port }}/service/rest/v1/repositories/docker/hosted"
+        method: POST
+        user: "admin"
+        password: "{{ nexus_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "docker-hosted"
+          online: true
+          storage:
+            blobStoreName: "default"
+            strictContentTypeValidation: true
+            writePolicy: "allow"
+          docker:
+            v1Enabled: false
+            forceBasicAuth: true
+            httpPort: "{{ nexus_docker_hosted_port_val | int }}"
+        status_code: [201, 400]
+
+    - name: Remove bootstrap admin.password file after successful rotation
+      ansible.builtin.file:
+        path: "{{ nexus_data_dir }}/admin.password"
+        state: absent
+  tags: [nexus, config]
+
+- name: Display Nexus Repository status summary
+  ansible.builtin.debug:
+    msg: >-
+      [PASS] Nexus Repository OSS ({{ nexus_pinned_version }}) is healthy on
+      http://{{ nexus_domain }}:{{ nexus_web_port }} (Docker Registry port: {{ nexus_docker_hosted_port_val }})
+  tags: [nexus, validate]
+

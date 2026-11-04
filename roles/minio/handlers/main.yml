@@ -1,0 +1,9 @@
+---
+# roles/minio/handlers/main.yml
+
+- name: Restart minio
+  ansible.builtin.systemd:
+    name: minio
+    state: restarted
+    daemon_reload: true
+

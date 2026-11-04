@@ -1,0 +1,21 @@
+---
+# roles/nexus/defaults/main.yml
+
+nexus_pinned_version: "{{ nexus_version | default('3.75.1-01') }}"
+nexus_container_image: "sonatype/nexus3:{{ nexus_pinned_version | regex_replace('-01$', '') }}"
+nexus_data_dir: "/var/lib/nexus/nexus-data"
+nexus_uid: 200
+nexus_gid: 200
+
+nexus_web_port: "{{ nexus_http_port | default(8081) }}"
+nexus_docker_hosted_port_val: "{{ nexus_docker_hosted_port | default(5000) }}"
+nexus_docker_group_port_val: "{{ nexus_docker_group_port | default(5001) }}"
+
+# JVM Heap Sizing (tuned for local 3GB VM vs production 12GB VM)
+nexus_jvm_min_heap: "{{ '1024m' if (environment | default('local')) == 'local' else '2703m' }}"
+nexus_jvm_max_heap: "{{ '1200m' if (environment | default('local')) == 'local' else '2703m' }}"
+nexus_jvm_direct_mem: "{{ '1024m' if (environment | default('local')) == 'local' else '2703m' }}"
+
+nexus_admin_user: "admin"
+nexus_admin_password: "{{ vault_nexus_admin_password | default('ChangeMe_LocalNexusAdmin!2026') }}"
+

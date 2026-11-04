@@ -1,0 +1,27 @@
+---
+# roles/jenkins/defaults/main.yml
+
+jenkins_pinned_version: "{{ jenkins_version | default('2.479.3') }}"
+jenkins_java_pkg: "{{ java_package | default('openjdk-21-jre-headless') }}"
+jenkins_home: "/var/lib/jenkins"
+jenkins_user: "jenkins"
+jenkins_group: "jenkins"
+jenkins_web_port: "{{ jenkins_http_port | default(8080) }}"
+jenkins_agent_port: 50000
+
+jenkins_admin_user: "admin"
+jenkins_admin_password: "{{ vault_jenkins_admin_password | default('ChangeMe_LocalJenkinsAdmin!2026') }}"
+
+# Memory tuning based on environment (compact 2.5GB VM vs production 8GB VM)
+jenkins_java_opts: >-
+  -Djava.awt.headless=true
+  -Djenkins.install.runSetupWizard=false
+  -Dhudson.model.DirectoryBrowserSupport.CSP=
+  -Xms{{ '512m' if (environment | default('local')) == 'local' else '2048m' }}
+  -Xmx{{ '1280m' if (environment | default('local')) == 'local' else '4096m' }}
+
+# Trivy scanner pinned version
+jenkins_trivy_version: "{{ trivy_version | default('0.58.1') }}"
+jenkins_trivy_arch: "{{ 'ARM64' if ansible_architecture == 'aarch64' else '64bit' }}"
+jenkins_trivy_deb_url: "https://github.com/aquasecurity/trivy/releases/download/v{{ jenkins_trivy_version }}/trivy_{{ jenkins_trivy_version }}_Linux-{{ jenkins_trivy_arch }}.deb"
+

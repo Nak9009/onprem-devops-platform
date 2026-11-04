@@ -1,0 +1,133 @@
+---
+# roles/gitlab/tasks/main.yml
+
+- name: Validate hardware prerequisites for GitLab CE
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= 3500
+    fail_msg: "GitLab CE requires at least 3.5 GB (3500 MB) of RAM. Detected: {{ ansible_memtotal_mb }} MB."
+  tags: [gitlab, prereqs]
+
+- name: Install GitLab prerequisites and configure UFW firewall rules
+  block:
+    - name: Install required system packages for GitLab
+      ansible.builtin.apt:
+        name:
+          - curl
+          - openssh-server
+          - ca-certificates
+          - tzdata
+          - perl
+          - openssl
+        state: present
+        update_cache: true
+
+    - name: Open GitLab HTTP, HTTPS, and Git-SSH ports in UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port | string }}"
+        proto: tcp
+        comment: "{{ item.comment }}"
+      loop:
+        - { port: "{{ gitlab_http_host_port }}", comment: "GitLab HTTP" }
+        - { port: "{{ gitlab_https_host_port }}", comment: "GitLab HTTPS" }
+        - { port: "{{ gitlab_ssh_host_port }}", comment: "GitLab Git-SSH" }
+      when: ufw_enabled | default(true) | bool
+  tags: [gitlab, firewall]
+
+- name: Ensure GitLab SSL directory and TLS certificate exist
+  block:
+    - name: Create /etc/gitlab/ssl directory
+      ansible.builtin.file:
+        path: "{{ gitlab_ssl_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Check if TLS certificate already exists
+      ansible.builtin.stat:
+        path: "{{ gitlab_ssl_cert }}"
+      register: gitlab_cert_stat
+
+    - name: Generate self-signed TLS certificate for GitLab if not present
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -nodes -days 825 -newkey rsa:4096
+          -keyout {{ gitlab_ssl_key }}
+          -out {{ gitlab_ssl_cert }}
+          -subj "/C=KH/ST=PhnomPenh/L=PhnomPenh/O=DevOpsPlatform/CN={{ gitlab_domain }}"
+          -addext "subjectAltName=DNS:{{ gitlab_domain }},IP:{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+      when: not gitlab_cert_stat.stat.exists
+      changed_when: true
+  tags: [gitlab, tls]
+
+- name: Add official GitLab CE APT repository and install pinned version
+  block:
+    - name: Check if GitLab APT source list exists
+      ansible.builtin.stat:
+        path: /etc/apt/sources.list.d/gitlab_gitlab-ce.list
+      register: gitlab_repo_stat
+
+    - name: Download and execute GitLab CE repository installation script
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+      when: not gitlab_repo_stat.stat.exists
+      changed_when: true
+
+    - name: Install pinned GitLab CE package
+      ansible.builtin.apt:
+        name: "{{ gitlab_package_name }}={{ gitlab_pinned_version }}"
+        state: present
+        update_cache: true
+      environment:
+        EXTERNAL_URL: "{{ gitlab_external_url }}"
+        GITLAB_ROOT_PASSWORD: "{{ gitlab_initial_root_password }}"
+      no_log: true
+      register: gitlab_apt_install
+      retries: 2
+      delay: 15
+      until: gitlab_apt_install is succeeded
+  rescue:
+    - name: Install latest available GitLab CE package in repo if exact version was archived
+      ansible.builtin.apt:
+        name: "{{ gitlab_package_name }}"
+        state: present
+        update_cache: true
+      environment:
+        EXTERNAL_URL: "{{ gitlab_external_url }}"
+        GITLAB_ROOT_PASSWORD: "{{ gitlab_initial_root_password }}"
+      no_log: true
+  tags: [gitlab, packages]
+
+- name: Render /etc/gitlab/gitlab.rb configuration
+  ansible.builtin.template:
+    src: gitlab.rb.j2
+    dest: /etc/gitlab/gitlab.rb
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Reconfigure gitlab
+  tags: [gitlab, config]
+
+- name: Flush handlers to execute gitlab-ctl reconfigure when needed
+  ansible.builtin.meta: flush_handlers
+  tags: [gitlab, config, validate]
+
+- name: Validate GitLab web readiness endpoint
+  ansible.builtin.uri:
+    url: "https://127.0.0.1/-/readiness"
+    validate_certs: false
+    status_code: 200
+  register: gitlab_health
+  retries: 20
+  delay: 10
+  until: gitlab_health.status == 200
+  tags: [gitlab, validate]
+
+- name: Display GitLab status summary
+  ansible.builtin.debug:
+    msg: "[PASS] GitLab CE is healthy and reachable at {{ gitlab_external_url }}"
+  tags: [gitlab, validate]
+

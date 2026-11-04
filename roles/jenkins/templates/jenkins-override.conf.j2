@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# /etc/systemd/system/jenkins.service.d/override.conf
+[Service]
+Environment="JAVA_OPTS={{ jenkins_java_opts }}"
+Environment="JENKINS_PORT={{ jenkins_web_port }}"
+LimitNOFILE=65536
+

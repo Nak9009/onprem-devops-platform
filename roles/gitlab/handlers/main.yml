@@ -1,0 +1,13 @@
+---
+# roles/gitlab/handlers/main.yml
+
+- name: Reconfigure gitlab
+  ansible.builtin.command:
+    cmd: gitlab-ctl reconfigure
+  changed_when: true
+
+- name: Restart gitlab
+  ansible.builtin.command:
+    cmd: gitlab-ctl restart
+  changed_when: true
+

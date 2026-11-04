@@ -1,0 +1,141 @@
+---
+# roles/minio/tasks/main.yml
+
+- name: Create dedicated MinIO system group and user
+  block:
+    - name: Ensure MinIO system group exists
+      ansible.builtin.group:
+        name: "{{ minio_system_group }}"
+        system: true
+        state: present
+
+    - name: Ensure MinIO system user exists
+      ansible.builtin.user:
+        name: "{{ minio_system_user }}"
+        group: "{{ minio_system_group }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ minio_storage_dir }}"
+        create_home: false
+        state: present
+  tags: [minio, prereqs]
+
+- name: Create MinIO storage and configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ minio_system_user }}"
+    group: "{{ minio_system_group }}"
+    mode: "0750"
+  loop:
+    - /var/lib/minio
+    - "{{ minio_storage_dir }}"
+    - "{{ minio_config_dir }}"
+  tags: [minio, storage]
+
+- name: Open MinIO S3 API and Console ports in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "{{ minio_s3_port }}", comment: "MinIO S3 API" }
+    - { port: "{{ minio_web_port }}", comment: "MinIO Web Console" }
+  when: ufw_enabled | default(true) | bool
+  tags: [minio, firewall]
+
+- name: Download pinned MinIO server and mc client binaries
+  block:
+    - name: Download MinIO server binary ({{ minio_release }})
+      ansible.builtin.get_url:
+        url: "{{ minio_binary_url }}"
+        dest: /usr/local/bin/minio
+        owner: root
+        group: root
+        mode: "0755"
+      register: minio_dl
+      retries: 3
+      delay: 5
+      until: minio_dl is succeeded
+
+    - name: Download MinIO Client (mc) binary
+      ansible.builtin.get_url:
+        url: "{{ minio_mc_url }}"
+        dest: /usr/local/bin/mc
+        owner: root
+        group: root
+        mode: "0755"
+      register: mc_dl
+      retries: 3
+      delay: 5
+      until: mc_dl is succeeded
+  tags: [minio, packages]
+
+- name: Render /etc/default/minio environment file
+  ansible.builtin.template:
+    src: minio.env.j2
+    dest: /etc/default/minio
+    owner: root
+    group: "{{ minio_system_group }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart minio
+  tags: [minio, config]
+
+- name: Render /etc/systemd/system/minio.service
+  ansible.builtin.template:
+    src: minio.service.j2
+    dest: /etc/systemd/system/minio.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart minio
+  tags: [minio, config]
+
+- name: Ensure MinIO service is started and enabled
+  ansible.builtin.systemd:
+    name: minio
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags: [minio, service]
+
+- name: Flush handlers before MinIO validation
+  ansible.builtin.meta: flush_handlers
+  tags: [minio, validate]
+
+- name: Verify MinIO liveness health check endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ minio_s3_port }}/minio/health/live"
+    method: GET
+    status_code: 200
+  register: minio_health
+  retries: 15
+  delay: 5
+  until: minio_health.status == 200
+  tags: [minio, validate]
+
+- name: Configure local mc alias and create default platform buckets idempotently
+  block:
+    - name: Configure mc local alias
+      ansible.builtin.command:
+        cmd: "mc alias set local http://127.0.0.1:{{ minio_s3_port }} {{ minio_root_username }} {{ minio_root_secret }}"
+      no_log: true
+      changed_when: false
+
+    - name: Create default buckets for Loki, Artifacts, and Backups
+      ansible.builtin.command:
+        cmd: "mc mb --ignore-existing local/{{ item }}"
+      loop: "{{ minio_default_buckets }}"
+      register: mc_mb_out
+      changed_when: "'Bucket created successfully' in mc_mb_out.stdout"
+  tags: [minio, buckets]
+
+- name: Display MinIO readiness summary
+  ansible.builtin.debug:
+    msg: >-
+      [PASS] MinIO S3 Storage ({{ minio_release }}) is active on port {{ minio_s3_port }}
+      (Console: {{ minio_web_port }}) with buckets: {{ minio_default_buckets | join(', ') }}
+  tags: [minio, validate]
+

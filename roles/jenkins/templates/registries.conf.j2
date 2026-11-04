@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# /etc/containers/registries.conf.d/99-nexus.conf
+# Configures rootless Podman/Buildah on Jenkins to trust internal Nexus Docker registries
+
+[[registry]]
+location = "{{ docker_registry_domain | default('registry.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+insecure = true
+
+[[registry]]
+location = "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
+insecure = true
+
+[[registry]]
+location = "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_group_port | default(5001) }}"
+insecure = true
+

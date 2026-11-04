@@ -1,0 +1,20 @@
+---
+# playbooks/jenkins.yml
+# Deploys Jenkins LTS, OpenJDK 21, Rootless Podman/Buildah, and Trivy on the 'jenkins' group.
+
+- name: Deploy Jenkins Continuous Integration Server
+  hosts: jenkins
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      when: ( inventory_dir ~ '/group_vars/vault.yml' ) is file
+      no_log: true
+      tags: [always]
+
+  roles:
+    - role: jenkins
+      tags: [jenkins]
+

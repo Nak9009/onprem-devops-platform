@@ -1,0 +1,208 @@
+---
+# roles/jenkins/tasks/main.yml
+
+- name: Validate hardware prerequisites for Jenkins
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= 2000
+    fail_msg: "Jenkins LTS requires at least 2 GB RAM. Detected: {{ ansible_memtotal_mb }} MB."
+  tags: [jenkins, prereqs]
+
+- name: Open Jenkins HTTP and JNLP Agent ports in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "{{ jenkins_web_port }}", comment: "Jenkins HTTP Web UI and Webhook Receiver" }
+    - { port: "{{ jenkins_agent_port }}", comment: "Jenkins Inbound JNLP Agent Port" }
+  when: ufw_enabled | default(true) | bool
+  tags: [jenkins, firewall]
+
+- name: Install OpenJDK 21, rootless container build tools (Podman/Buildah), and CI utilities
+  ansible.builtin.apt:
+    name:
+      - fontconfig
+      - "{{ jenkins_java_pkg }}"
+      - podman
+      - buildah
+      - skopeo
+      - uidmap
+      - slirp4netns
+      - fuse-overlayfs
+      - git
+      - jq
+      - maven
+      - python3-pytest
+    state: present
+    update_cache: true
+  register: jenkins_deps_result
+  retries: 3
+  delay: 10
+  until: jenkins_deps_result is succeeded
+  tags: [jenkins, packages]
+
+- name: Install pinned Jenkins LTS from official Debian repository
+  block:
+    - name: Ensure /etc/apt/keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download Jenkins official GPG key
+      ansible.builtin.get_url:
+        url: "https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key"
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add Jenkins LTS DEB822 APT repository
+      ansible.builtin.deb822_repository:
+        name: jenkins
+        types: [deb]
+        uris: ["https://pkg.jenkins.io/debian-stable"]
+        suites: ["binary/"]
+        signed_by: /etc/apt/keyrings/jenkins-keyring.asc
+        state: present
+
+    - name: Update APT cache after adding Jenkins repository
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install pinned Jenkins version ({{ jenkins_pinned_version }})
+      ansible.builtin.apt:
+        name: "jenkins={{ jenkins_pinned_version }}"
+        state: present
+        update_cache: true
+        allow_downgrade: true
+  rescue:
+    - name: Fallback to latest available Jenkins LTS in stable repository if exact patch was superseded
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: true
+  tags: [jenkins, packages]
+
+- name: Install pinned Trivy vulnerability scanner ({{ jenkins_trivy_version }})
+  block:
+    - name: Check if Trivy is already installed at target version
+      ansible.builtin.command:
+        cmd: trivy --version
+      register: trivy_ver_check
+      failed_when: false
+      changed_when: false
+
+    - name: Download and install Trivy .deb package
+      ansible.builtin.apt:
+        deb: "{{ jenkins_trivy_deb_url }}"
+        state: present
+      when: trivy_ver_check.rc != 0 or (jenkins_trivy_version not in trivy_ver_check.stdout)
+  tags: [jenkins, trivy, security]
+
+- name: Configure rootless Podman/Buildah subuid, subgid, and Nexus registry trust for jenkins user
+  block:
+    - name: Ensure subuid entry exists for jenkins user (rootless container builds without Docker socket)
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        regexp: "^{{ jenkins_user }}:"
+        line: "{{ jenkins_user }}:100000:65536"
+        create: true
+        mode: "0644"
+
+    - name: Ensure subgid entry exists for jenkins user
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        regexp: "^{{ jenkins_user }}:"
+        line: "{{ jenkins_user }}:100000:65536"
+        create: true
+        mode: "0644"
+
+    - name: Ensure /etc/containers/registries.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/containers/registries.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure Podman/Buildah registry trust for Nexus Docker Registry
+      ansible.builtin.template:
+        src: registries.conf.j2
+        dest: /etc/containers/registries.conf.d/99-nexus.conf
+        owner: root
+        group: root
+        mode: "0644"
+  tags: [jenkins, config, security]
+
+- name: Configure Jenkins systemd override and initial security Groovy script
+  block:
+    - name: Create systemd override directory for jenkins.service
+      ansible.builtin.file:
+        path: /etc/systemd/system/jenkins.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render Jenkins systemd override configuration
+      ansible.builtin.template:
+        src: jenkins-override.conf.j2
+        dest: /etc/systemd/system/jenkins.service.d/override.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart jenkins
+
+    - name: Create init.groovy.d directory in JENKINS_HOME
+      ansible.builtin.file:
+        path: "{{ jenkins_home }}/init.groovy.d"
+        state: directory
+        owner: "{{ jenkins_user }}"
+        group: "{{ jenkins_group }}"
+        mode: "0750"
+
+    - name: Render initial security Groovy bootstrap script
+      ansible.builtin.template:
+        src: init-security.groovy.j2
+        dest: "{{ jenkins_home }}/init.groovy.d/01-security.groovy"
+        owner: "{{ jenkins_user }}"
+        group: "{{ jenkins_group }}"
+        mode: "0640"
+      no_log: true
+      notify: Restart jenkins
+  tags: [jenkins, config]
+
+- name: Ensure Jenkins service is started and enabled
+  ansible.builtin.systemd:
+    name: jenkins
+    state: started
+    enabled: true
+    daemon_reload: true
+  tags: [jenkins, service]
+
+- name: Flush handlers before validating Jenkins HTTP endpoint
+  ansible.builtin.meta: flush_handlers
+  tags: [jenkins, validate]
+
+- name: Verify Jenkins login page responds with HTTP 200
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ jenkins_web_port }}/login"
+    method: GET
+    status_code: 200
+  register: jenkins_http_check
+  retries: 30
+  delay: 10
+  until: jenkins_http_check.status == 200
+  tags: [jenkins, validate]
+
+- name: Display Jenkins readiness summary
+  ansible.builtin.debug:
+    msg: >-
+      [PASS] Jenkins LTS is active at http://{{ jenkins_domain }}:{{ jenkins_web_port }}
+      with rootless Buildah/Podman and Trivy v{{ jenkins_trivy_version }} (Docker socket is NOT exposed).
+  tags: [jenkins, validate]

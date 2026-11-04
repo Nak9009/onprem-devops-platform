@@ -1,0 +1,116 @@
+---
+# roles/docker/tasks/main.yml
+
+- name: Validate OS prerequisites for Docker CE
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version == "24.04"
+    fail_msg: "Docker role requires Ubuntu 24.04 LTS."
+
+- name: Install Docker repository and engine with error handling
+  block:
+    - name: Create /etc/apt/keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download official Docker GPG key
+      ansible.builtin.get_url:
+        url: "{{ docker_gpg_url }}"
+        dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add Docker DEB822 APT repository for Ubuntu 24.04 (noble)
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: [deb]
+        uris: ["{{ docker_apt_url }}"]
+        suites: ["{{ ansible_distribution_release }}"]
+        components: [stable]
+        architectures: ["{{ docker_apt_arch }}"]
+        signed_by: /etc/apt/keyrings/docker.asc
+        state: present
+
+    - name: Update APT cache after adding Docker repository
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install pinned Docker CE packages
+      ansible.builtin.apt:
+        name:
+          - "docker-ce={{ docker_version }}"
+          - "docker-ce-cli={{ docker_version }}"
+          - "containerd.io"
+          - "docker-buildx-plugin"
+          - "docker-compose-plugin"
+        state: present
+        update_cache: true
+        allow_downgrade: true
+      register: docker_apt_result
+      retries: 3
+      delay: 10
+      until: docker_apt_result is succeeded
+
+    - name: Pin Docker CE version in APT preferences
+      ansible.builtin.copy:
+        dest: /etc/apt/preferences.d/docker-ce.pref
+        content: |
+          Package: docker-ce docker-ce-cli
+          Pin: version {{ docker_version }}
+          Pin-Priority: 1001
+        owner: root
+        group: root
+        mode: "0644"
+  rescue:
+    - name: Fallback to available Ubuntu noble Docker CE package if exact patch was superseded
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+- name: Ensure /etc/docker directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure /etc/docker/daemon.json
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: "{{ docker_daemon_options | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Flush handlers before validating Docker
+  ansible.builtin.meta: flush_handlers
+
+- name: Validate Docker daemon health
+  ansible.builtin.command:
+    cmd: docker info --format '{{ "{{" }}.ServerVersion{{ "}}" }}'
+  register: docker_version_out
+  changed_when: false
+
+- name: Display Docker Engine readiness
+  ansible.builtin.debug:
+    msg: "[PASS] Docker Engine v{{ docker_version_out.stdout }} is active on {{ inventory_hostname }}."

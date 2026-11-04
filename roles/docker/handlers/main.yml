@@ -1,0 +1,9 @@
+---
+# roles/docker/handlers/main.yml
+
+- name: Restart docker
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+    daemon_reload: true
+

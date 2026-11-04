@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+# /etc/gitlab/gitlab.rb - GitLab Omnibus Configuration ({{ environment | default('local') }})
+
+external_url '{{ gitlab_external_url }}'
+
+# NGINX & TLS Configuration
+nginx['enable'] = true
+nginx['redirect_http_to_https'] = true
+nginx['ssl_certificate'] = "{{ gitlab_ssl_cert }}"
+nginx['ssl_certificate_key'] = "{{ gitlab_ssl_key }}"
+nginx['ssl_protocols'] = "TLSv1.2 TLSv1.3"
+lets_encrypt['enable'] = false
+
+# GitLab SSH Port (Separated from host OpenSSH port 22)
+gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_host_port }}
+
+# Timezone
+gitlab_rails['time_zone'] = '{{ timezone | default("Asia/Phnom_Penh") }}'
+
+# Initial Root Password (applied only during initial bootstrap)
+gitlab_rails['initial_root_password'] = '{{ gitlab_initial_root_password }}'
+
+# Local Webhook & Outbound Requests (Required for GitLab -> Jenkins Webhook on private subnets)
+gitlab_rails['webhook_timeout'] = 10
+gitlab_rails['allow_local_requests_from_web_hooks_and_services'] = true
+
+# Resource Tuning ({{ environment | default('local') }} profile)
+puma['worker_processes'] = {{ gitlab_puma_workers }}
+puma['min_threads'] = 1
+puma['max_threads'] = 4
+sidekiq['concurrency'] = {{ gitlab_sidekiq_concurrency }}
+
+# Embedded Prometheus Monitoring (Externalized to devops-monitor in local profile)
+prometheus_monitoring['enable'] = {{ gitlab_prometheus_monitoring_enabled | lower }}
+
+# Backup Retention Settings
+gitlab_rails['manage_backup_path'] = true
+gitlab_rails['backup_path'] = "{{ gitlab_backup_path }}"
+gitlab_rails['backup_keep_time'] = {{ gitlab_backup_keep_time }}
+
