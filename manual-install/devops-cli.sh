@@ -62,10 +62,19 @@ EOF
 check_http() {
   local name="$1"
   local url="$2"
+  local vm_hint="${3:-}"
+  if [[ "${TARGET_ENV}" == "local" && -n "${vm_hint}" ]] && command -v multipass >/dev/null 2>&1; then
+    if ! multipass list --format csv 2>/dev/null | grep -q "^${vm_hint},Running,"; then
+      printf "  [SKIP] %-28s %-42s (VM '%s' not running)\n" "${name}" "${url}" "${vm_hint}"
+      return 0
+    fi
+  fi
   local code
   code="$(curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 3 "${url}" || true)"
   if [[ "${code}" =~ ^(200|204|301|302|401|403)$ ]]; then
     printf "  [OK]   %-28s %-42s (HTTP %s)\n" "${name}" "${url}" "${code}"
+  elif [[ "${name}" == *"Vault"* && "${code}" =~ ^(429|501|503)$ ]]; then
+    printf "  [OK]   %-28s %-42s (HTTP %s - Vault Running)\n" "${name}" "${url}" "${code}"
   else
     printf "  [DOWN] %-28s %-42s (HTTP %s)\n" "${name}" "${url}" "${code}"
   fi
@@ -75,6 +84,13 @@ check_tcp() {
   local name="$1"
   local host="$2"
   local port="$3"
+  local vm_hint="${4:-}"
+  if [[ "${TARGET_ENV}" == "local" && -n "${vm_hint}" ]] && command -v multipass >/dev/null 2>&1; then
+    if ! multipass list --format csv 2>/dev/null | grep -q "^${vm_hint},Running,"; then
+      printf "  [SKIP] %-28s %s:%s (VM '%s' not running)\n" "${name}" "${host}" "${port}" "${vm_hint}"
+      return 0
+    fi
+  fi
   if nc -z -w 2 "${host}" "${port}" >/dev/null 2>&1; then
     printf "  [OK]   %-28s %s:%s (TCP OPEN)\n" "${name}" "${host}" "${port}"
   else
@@ -192,26 +208,26 @@ cmd_install_clis() {
 
 cmd_status() {
   echo "=== Layer 1: DevOps, Databases, Storage & Observability ==="
-  check_http "GitLab CE"          "http://${GITLAB_IP}/-/readiness"
-  check_http "Jenkins LTS"        "http://${JENKINS_IP}:8080/login"
-  check_http "Sonatype Nexus"     "http://${NEXUS_IP}:8081/service/rest/v1/status"
-  check_http "MinIO S3 API"       "http://${MINIO_VIP}:9000/minio/health/live"
-  check_tcp  "PostgreSQL RW VIP"  "${PG_VIP}" "5432"
-  check_tcp  "PostgreSQL RO VIP"  "${PG_VIP}" "5433"
-  check_http "Patroni pg-db1"     "http://${PG_DB1_IP}:8008/health"
-  check_tcp  "Redis Server"       "${REDIS_IP}" "6379"
-  check_http "Prometheus"         "http://${MONITOR_IP}:9090/-/healthy"
-  check_http "Grafana"            "http://${MONITOR_IP}:3000/api/health"
-  check_http "Grafana Loki"       "http://${MONITOR_IP}:3100/ready"
-  check_http "HashiCorp Vault"    "http://${VAULT_IP}:8200/v1/sys/health"
+  check_http "GitLab CE"          "http://${GITLAB_IP}/-/readiness"                 "devops-gitlab"
+  check_http "Jenkins LTS"        "http://${JENKINS_IP}:8080/login"                 "devops-jenkins"
+  check_http "Sonatype Nexus"     "http://${NEXUS_IP}:8081/service/rest/v1/status"  "devops-nexus"
+  check_http "MinIO S3 API"       "http://${MINIO_VIP}:9000/minio/health/live"      "devops-nexus"
+  check_tcp  "PostgreSQL RW VIP"  "${PG_VIP}" "5432"                                "pg-db1"
+  check_tcp  "PostgreSQL RO VIP"  "${PG_VIP}" "5433"                                "pg-db1"
+  check_http "Patroni pg-db1"     "http://${PG_DB1_IP}:8008/health"                 "pg-db1"
+  check_tcp  "Redis Server"       "${REDIS_IP}" "6379"                              "pg-db1"
+  check_http "Prometheus"         "http://${MONITOR_IP}:9090/-/healthy"             "devops-monitor"
+  check_http "Grafana"            "http://${MONITOR_IP}:3000/api/health"            "devops-monitor"
+  check_http "Grafana Loki"       "http://${MONITOR_IP}:3100/ready"                 "devops-monitor"
+  check_http "HashiCorp Vault"    "http://${VAULT_IP}:8200/v1/sys/health"           "devops-monitor"
   echo
   echo "=== Layer 2: Dedicated Kubernetes Management Cluster ==="
-  check_tcp  "Mgmt K8s API"       "${K8S_MGMT_CP01_IP}" "6443"
-  check_http "Rancher Server"     "https://${K8S_MGMT_CP01_IP}/ping"
-  check_http "Argo CD Server"     "https://${K8S_MGMT_CP01_IP}:30443/healthz"
+  check_tcp  "Mgmt K8s API"       "${K8S_MGMT_CP01_IP}" "6443"                      "k8s-mgmt-cp01"
+  check_http "Rancher Server"     "https://${K8S_MGMT_CP01_IP}/ping"                "k8s-mgmt-cp01"
+  check_http "Argo CD Server"     "https://${K8S_MGMT_CP01_IP}:30443/healthz"       "k8s-mgmt-cp01"
   echo
   echo "=== Layer 3: Application Kubernetes Cluster ==="
-  check_tcp  "App K8s API"        "${K8S_APP_CP01_IP}" "6443"
+  check_tcp  "App K8s API"        "${K8S_APP_CP01_IP}" "6443"                       "k8s-cp01"
 }
 
 case "${1:-}" in
