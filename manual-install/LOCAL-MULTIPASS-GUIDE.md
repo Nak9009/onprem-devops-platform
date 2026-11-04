@@ -85,12 +85,28 @@ multipass exec k8s-cp01 -- bash -c "cd ~/manual-install && ./devops-cli.sh --env
 multipass exec k8s-cp01 -- bash -c "cd ~/manual-install && ./devops-cli.sh --env local install kubernetes-cp"
 ```
 
-### Method 2: Remote SSH Install from Your Workstation (`devops-cli.sh --env local`)
-If SSH key access (`ansible@<ip>`) was configured by `multipass/create-vms.sh`:
+### Method 2: Direct Remote SSH Install by Multipass VM Name (Recommended)
+`devops-cli.sh --env local remote-install` automatically resolves the live Multipass VM IP and authenticates with `multipass/.ssh/id_ed25519`:
 ```bash
-./manual-install/devops-cli.sh --env local remote-install common        ansible@192.168.252.17
-./manual-install/devops-cli.sh --env local remote-install postgresql-ha ansible@192.168.252.17
-./manual-install/devops-cli.sh --env local remote-install redis         ansible@192.168.252.17
+# 1. Layer 1 Database & Redis on pg-db1 (192.168.252.26):
+./manual-install/devops-cli.sh --env local remote-install common        pg-db1
+./manual-install/devops-cli.sh --env local remote-install postgresql-ha pg-db1
+./manual-install/devops-cli.sh --env local remote-install redis         pg-db1
+
+# 2. Layer 1 Monitoring, Logging & Vault on devops-monitor (192.168.252.29):
+./manual-install/devops-cli.sh --env local remote-install common        devops-monitor
+./manual-install/devops-cli.sh --env local remote-install monitoring    devops-monitor
+./manual-install/devops-cli.sh --env local remote-install logging       devops-monitor
+./manual-install/devops-cli.sh --env local remote-install vault         devops-monitor
+
+# 3. Layer 2 Management Kubernetes Cluster (Argo CD + Rancher) on k8s-mgmt-cp01 (192.168.252.27):
+./manual-install/devops-cli.sh --env local remote-install common          k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local remote-install kubernetes-mgmt k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local remote-install rancher         k8s-mgmt-cp01
+
+# 4. Layer 3 Application Kubernetes Cluster (Business Apps Only) on k8s-cp01 (192.168.252.28):
+./manual-install/devops-cli.sh --env local remote-install common        k8s-cp01
+./manual-install/devops-cli.sh --env local remote-install kubernetes-cp k8s-cp01
 ```
 
 ---

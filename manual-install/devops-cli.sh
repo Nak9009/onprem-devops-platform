@@ -116,18 +116,34 @@ cmd_remote_install() {
   local mod="${1:-}"
   local target="${2:-}"
   if [[ -z "${mod}" || -z "${target}" || ! -f "${BASE_DIR}/${mod}/install.sh" ]]; then
-    echo "Usage: ./manual-install/devops-cli.sh remote-install <module> <user@host>" >&2
+    echo "Usage: ./manual-install/devops-cli.sh [--env local|production] remote-install <module> <vm-name|user@host>" >&2
     exit 1
   fi
-  echo "[INFO] Deploying '${mod}' to remote host ${target}..."
-  ssh "${target}" "mkdir -p /tmp/manual-install/${mod}"
-  scp -q "${ENV_FILE}" "${target}:/tmp/manual-install/platform.env"
-  scp -q -r "${BASE_DIR}/${mod}/"* "${target}:/tmp/manual-install/${mod}/"
-  if [[ "${mod}" == "kubernetes-mgmt" ]]; then
-    ssh "${target}" "mkdir -p /tmp/manual-install/kubernetes-cp"
-    scp -q -r "${BASE_DIR}/kubernetes-cp/"* "${target}:/tmp/manual-install/kubernetes-cp/"
+
+  local ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+  local mp_key="${BASE_DIR}/../multipass/.ssh/id_ed25519"
+  if [[ "${TARGET_ENV}" == "local" && -f "${mp_key}" ]]; then
+    ssh_opts+=(-i "${mp_key}")
   fi
-  ssh -t "${target}" "sudo PLATFORM_ENV_FILE=/tmp/manual-install/platform.env bash /tmp/manual-install/${mod}/install.sh"
+
+  # If target is a Multipass VM name without '@', resolve its IP and prepend SSH_USER@
+  if [[ "${target}" != *"@"* ]] && command -v multipass >/dev/null 2>&1; then
+    local resolved_ip
+    resolved_ip="$(multipass list --format csv 2>/dev/null | awk -F',' -v v="${target}" '$1==v && $2=="Running" {print $3}' | awk '{print $1}')"
+    if [[ -n "${resolved_ip}" ]]; then
+      target="${SSH_USER:-ansible}@${resolved_ip}"
+    fi
+  fi
+
+  echo "[INFO] Deploying '${mod}' to remote host ${target} (env: ${TARGET_ENV})..."
+  ssh "${ssh_opts[@]}" "${target}" "mkdir -p /tmp/manual-install/${mod}"
+  scp -q "${ssh_opts[@]}" "${ENV_FILE}" "${target}:/tmp/manual-install/platform.env"
+  scp -q "${ssh_opts[@]}" -r "${BASE_DIR}/${mod}/"* "${target}:/tmp/manual-install/${mod}/"
+  if [[ "${mod}" == "kubernetes-mgmt" ]]; then
+    ssh "${ssh_opts[@]}" "${target}" "mkdir -p /tmp/manual-install/kubernetes-cp"
+    scp -q "${ssh_opts[@]}" -r "${BASE_DIR}/kubernetes-cp/"* "${target}:/tmp/manual-install/kubernetes-cp/"
+  fi
+  ssh -t "${ssh_opts[@]}" "${target}" "sudo PLATFORM_ENV_FILE=/tmp/manual-install/platform.env bash /tmp/manual-install/${mod}/install.sh"
 }
 
 cmd_install_clis() {
