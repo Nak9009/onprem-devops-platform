@@ -17,6 +17,15 @@
         from_ip: "{{ common_management_subnet }}"
         comment: "Allow trusted internal DevOps management subnet"
 
+    - name: Allow intra-subnet traffic on primary interface network
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }}"
+        comment: "Allow local interface subnet traffic"
+      when:
+        - ansible_default_ipv4.network is defined
+        - ansible_default_ipv4.prefix is defined
+
     - name: Allow Pod CIDR traffic on Kubernetes nodes
       community.general.ufw:
         rule: allow

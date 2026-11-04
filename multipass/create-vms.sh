@@ -3,7 +3,7 @@
 # Idempotent Multipass VM provisioning script for the On-Premises DevOps Platform.
 #
 # Usage:
-#   ./multipass/create-vms.sh [--profile compact|minimal|ha] [--recreate] [--dry-run] [--allow-overcommit]
+#   ./multipass/create-vms.sh [--profile compact|minimal|ha] [--vm <name>] [--recreate] [--dry-run] [--allow-overcommit] [--skip-disk-check]
 
 set -euo pipefail
 
@@ -15,6 +15,8 @@ UBUNTU_RELEASE="24.04"
 RECREATE=false
 DRY_RUN=false
 ALLOW_OVERCOMMIT=false
+SKIP_DISK_CHECK=false
+TARGET_VM_FILTER=""
 
 usage() {
   cat <<EOF
@@ -22,9 +24,11 @@ Usage: $(basename "$0") [OPTIONS]
 
 Options:
   -p, --profile <name>     VM sizing profile: compact (default, <=24GB host), minimal (32GB), ha (48GB)
+  -v, --vm <name1,name2>   Provision only specific VM(s) from the profile (useful when host disk is low)
   -r, --recreate           Destroy existing profile VMs (with confirmation) before creating
   -d, --dry-run            Validate resources and display planned multipass commands without executing
   -f, --allow-overcommit   Allow launching even if total VM RAM exceeds 80% of host physical RAM
+  --skip-disk-check        Allow launching even if host free disk space is below the safety reserve
   -h, --help               Show this help message
 EOF
 }
@@ -33,6 +37,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -p|--profile)
       PROFILE="$2"
+      shift 2
+      ;;
+    -v|--vm)
+      TARGET_VM_FILTER="$2"
       shift 2
       ;;
     -r|--recreate)
@@ -45,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -f|--allow-overcommit)
       ALLOW_OVERCOMMIT=true
+      shift
+      ;;
+    --skip-disk-check)
+      SKIP_DISK_CHECK=true
       shift
       ;;
     -h|--help)
@@ -69,6 +81,7 @@ fi
 echo "======================================================================"
 echo " On-Premises DevOps Platform - Multipass Environment Provisioner"
 echo " Selected Profile : ${PROFILE} (${PROFILE_FILE})"
+[[ -n "${TARGET_VM_FILTER}" ]] && echo " VM Filter        : ${TARGET_VM_FILTER}"
 echo " Target OS Image  : Ubuntu Server ${UBUNTU_RELEASE} LTS"
 echo "======================================================================"
 
@@ -94,19 +107,36 @@ convert_to_mb() {
   fi
 }
 
+vm_matches_filter() {
+  local vm="$1"
+  if [[ -z "${TARGET_VM_FILTER}" ]]; then
+    return 0
+  fi
+  [[ ",${TARGET_VM_FILTER}," == *",${vm},"* ]]
+}
+
+EXISTING_VMS="$(multipass list --format csv | tail -n +2 | cut -d',' -f1 || true)"
+
 TOTAL_REQ_CPUS=0
 TOTAL_REQ_MEM_MB=0
 VM_COUNT=0
+NEW_VM_COUNT=0
 
 while IFS='|' read -r vm_name vm_cpus vm_mem vm_disk vm_groups; do
   [[ -z "${vm_name}" || "${vm_name}" =~ ^# ]] && continue
+  if ! vm_matches_filter "${vm_name}"; then
+    continue
+  fi
   TOTAL_REQ_CPUS=$(( TOTAL_REQ_CPUS + vm_cpus ))
   MEM_MB=$(convert_to_mb "${vm_mem}")
   TOTAL_REQ_MEM_MB=$(( TOTAL_REQ_MEM_MB + MEM_MB ))
   VM_COUNT=$(( VM_COUNT + 1 ))
+  if ! echo "${EXISTING_VMS}" | grep -qx "${vm_name}"; then
+    NEW_VM_COUNT=$(( NEW_VM_COUNT + 1 ))
+  fi
 done < "${PROFILE_FILE}"
 
-# 3. Check Workstation Resources
+# 3. Check Workstation Resources (CPU, RAM, and Disk)
 if [[ "$(uname -s)" == "Darwin" ]]; then
   HOST_CPUS=$(sysctl -n hw.ncpu)
   HOST_MEM_BYTES=$(sysctl -n hw.memsize)
@@ -117,21 +147,38 @@ else
   HOST_MEM_MB=$(( HOST_MEM_KB / 1024 ))
 fi
 
+HOST_FREE_DISK_KB=$(df -Pk / | tail -1 | awk '{print $4}')
+HOST_FREE_DISK_GB=$(( HOST_FREE_DISK_KB / 1024 / 1024 ))
+# Each fresh Ubuntu 24.04 cloud image instance consumes ~2.5 GB initially + 5 GB safety reserve for host OS
+MIN_SAFE_DISK_GB=$(( NEW_VM_COUNT * 2 + 5 ))
+
 SAFE_MEM_THRESHOLD_MB=$(( HOST_MEM_MB * 80 / 100 ))
 
 echo "[INFO] Workstation Resource Assessment:"
 echo "  Host Physical CPUs      : ${HOST_CPUS} cores"
 echo "  Host Physical Memory    : ${HOST_MEM_MB} MB ($(( HOST_MEM_MB / 1024 )) GB)"
 echo "  Safe VM Memory Ceiling  : ${SAFE_MEM_THRESHOLD_MB} MB (80% of host RAM)"
-echo "  Profile VM Count        : ${VM_COUNT} VMs"
-echo "  Profile Total vCPUs     : ${TOTAL_REQ_CPUS} vCPUs (shared across hypervisor)"
-echo "  Profile Total Memory    : ${TOTAL_REQ_MEM_MB} MB (~$(( (TOTAL_REQ_MEM_MB + 512) / 1024 )) GB)"
+echo "  Host Free Disk Space (/): ${HOST_FREE_DISK_GB} GB (min recommended for ${NEW_VM_COUNT} new VMs: ${MIN_SAFE_DISK_GB} GB)"
+echo "  Target VM Count         : ${VM_COUNT} VMs (${NEW_VM_COUNT} new to create)"
+echo "  Target Total vCPUs      : ${TOTAL_REQ_CPUS} vCPUs (shared across hypervisor)"
+echo "  Target Total Memory     : ${TOTAL_REQ_MEM_MB} MB (~$(( (TOTAL_REQ_MEM_MB + 512) / 1024 )) GB)"
 
 if (( TOTAL_REQ_MEM_MB > SAFE_MEM_THRESHOLD_MB )) && [[ "${ALLOW_OVERCOMMIT}" == "false" ]]; then
   echo ""
-  echo "[ERROR] Profile '${PROFILE}' requires ${TOTAL_REQ_MEM_MB} MB RAM, which exceeds the safe ceiling"
+  echo "[ERROR] Selected VMs require ${TOTAL_REQ_MEM_MB} MB RAM, which exceeds the safe ceiling"
   echo "        of ${SAFE_MEM_THRESHOLD_MB} MB on this ${HOST_MEM_MB} MB workstation."
   echo "        Recommendation: Run with '--profile compact' (16.5 GB total) or pass '--allow-overcommit'."
+  exit 1
+fi
+
+if (( NEW_VM_COUNT > 0 && HOST_FREE_DISK_GB < MIN_SAFE_DISK_GB )) && [[ "${SKIP_DISK_CHECK}" == "false" ]] && [[ "${DRY_RUN}" == "false" ]]; then
+  echo ""
+  echo "[ERROR] Host root filesystem (/) only has ${HOST_FREE_DISK_GB} GB free space."
+  echo "        Launching ${NEW_VM_COUNT} new Ubuntu 24.04 VMs requires at least ~${MIN_SAFE_DISK_GB} GB free to avoid filling your disk."
+  echo "        Options:"
+  echo "          1. Free up disk space on macOS or purge unused Multipass VMs/snapshots."
+  echo "          2. Provision a single VM first: ./multipass/create-vms.sh --vm k8s-cp01"
+  echo "          3. Override this safety check with: --skip-disk-check"
   exit 1
 fi
 
@@ -141,6 +188,7 @@ if [[ "${RECREATE}" == "true" ]]; then
     echo "[DRY-RUN] Would invoke destroy-vms.sh --profile ${PROFILE}"
   else
     "${SCRIPT_DIR}/destroy-vms.sh" --profile "${PROFILE}"
+    EXISTING_VMS="$(multipass list --format csv | tail -n +2 | cut -d',' -f1 || true)"
   fi
 fi
 
@@ -161,7 +209,7 @@ PUB_KEY_CONTENT="$(cat "${SSH_KEY}.pub")"
 
 cat > "${CLOUD_INIT_FILE}" <<EOF
 #cloud-config
-package_update: true
+package_update: false
 users:
   - default
   - name: ansible
@@ -174,15 +222,15 @@ users:
       - ${PUB_KEY_CONTENT}
 EOF
 
-# 6. Query existing Multipass VMs for idempotency
-EXISTING_VMS="$(multipass list --format csv | tail -n +2 | cut -d',' -f1 || true)"
-
-# 7. Launch or start VMs in profile
+# 6. Launch or start VMs in profile
 echo ""
 echo "[INFO] Provisioning VMs for profile '${PROFILE}'..."
 
 while IFS='|' read -r vm_name vm_cpus vm_mem vm_disk vm_groups; do
   [[ -z "${vm_name}" || "${vm_name}" =~ ^# ]] && continue
+  if ! vm_matches_filter "${vm_name}"; then
+    continue
+  fi
 
   if [[ "${DRY_RUN}" == "true" ]]; then
     echo "  [DRY-RUN] multipass launch ${UBUNTU_RELEASE} --name ${vm_name} --cpus ${vm_cpus} --memory ${vm_mem} --disk ${vm_disk} --cloud-init ${CLOUD_INIT_FILE}"
@@ -215,11 +263,14 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   exit 0
 fi
 
-# 8. Generate Ansible Inventory from live Multipass IPs
+# 7. Generate Ansible Inventory from live Multipass IPs
 echo ""
-"${SCRIPT_DIR}/generate-inventory.sh" --profile "${PROFILE}"
+if [[ -n "${TARGET_VM_FILTER}" ]]; then
+  "${SCRIPT_DIR}/generate-inventory.sh" --profile "${PROFILE}" --running-only
+else
+  "${SCRIPT_DIR}/generate-inventory.sh" --profile "${PROFILE}"
+fi
 
-# 9. Display environment status
+# 8. Display environment status
 echo ""
 "${SCRIPT_DIR}/status.sh" --profile "${PROFILE}"
-

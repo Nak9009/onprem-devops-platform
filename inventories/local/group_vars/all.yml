@@ -25,7 +25,7 @@ ssh_public_key_path: "{{ playbook_dir }}/../multipass/.ssh/id_ed25519.pub"
 ufw_enabled: true
 ufw_default_incoming_policy: deny
 ufw_default_outgoing_policy: allow
-management_subnet: "192.168.64.0/24"
+management_subnet: "192.168.0.0/16"
 
 # Pinned Software Versions (Verified for Ubuntu 24.04 LTS Noble)
 os_release_supported: "24.04"

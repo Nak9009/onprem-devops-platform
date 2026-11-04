@@ -3,7 +3,7 @@
 # Dynamically queries Multipass VM IP addresses and writes inventories/local/hosts.yml.
 #
 # Usage:
-#   ./multipass/generate-inventory.sh [--profile compact|minimal|ha]
+#   ./multipass/generate-inventory.sh [--profile compact|minimal|ha] [--running-only]
 
 set -euo pipefail
 
@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PROFILE="${MULTIPASS_PROFILE:-compact}"
 OUTPUT_FILE="${PROJECT_ROOT}/inventories/local/hosts.yml"
+RUNNING_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +22,10 @@ while [[ $# -gt 0 ]]; do
     -o|--output)
       OUTPUT_FILE="$2"
       shift 2
+      ;;
+    --running-only)
+      RUNNING_ONLY=true
+      shift
       ;;
     *)
       echo "[ERROR] Unknown argument: $1" >&2
@@ -35,33 +40,55 @@ if [[ ! -f "${PROFILE_FILE}" ]]; then
   exit 1
 fi
 
-echo "[INFO] Generating Ansible inventory at ${OUTPUT_FILE} (profile: ${PROFILE})..."
+echo "[INFO] Generating Ansible inventory at ${OUTPUT_FILE} (profile: ${PROFILE}, running_only: ${RUNNING_ONLY})..."
+
+EXISTING_CSV="$(multipass list --format csv | tail -n +2 || true)"
 
 get_vm_ip() {
   local vm="$1"
-  local ip=""
-  if multipass info "${vm}" >/dev/null 2>&1; then
-    ip="$(multipass info "${vm}" --format csv | tail -n +2 | cut -d',' -f3 | awk '{print $1}')"
+  local row
+  row="$(echo "${EXISTING_CSV}" | grep "^${vm}," || true)"
+  if [[ -n "${row}" ]]; then
+    echo "${row}" | cut -d',' -f3 | awk '{print $1}'
+  else
+    echo ""
   fi
-  echo "${ip}"
+}
+
+is_vm_running() {
+  local vm="$1"
+  local row
+  row="$(echo "${EXISTING_CSV}" | grep "^${vm}," || true)"
+  if [[ -n "${row}" ]]; then
+    local state
+    state="$(echo "${row}" | cut -d',' -f2)"
+    [[ "${state}" == "Running" ]]
+    return $?
+  fi
+  return 1
 }
 
 render_group_hosts() {
   local target_group="$1"
   local idx=0
+  local matched=0
   while IFS='|' read -r vm_name vm_cpus vm_mem vm_disk vm_groups; do
     [[ -z "${vm_name}" || "${vm_name}" =~ ^# ]] && continue
     if [[ ",${vm_groups}," == *",${target_group},"* ]]; then
+      if [[ "${RUNNING_ONLY}" == "true" ]] && ! is_vm_running "${vm_name}"; then
+        idx=$(( idx + 1 ))
+        continue
+      fi
       local ip
       ip="$(get_vm_ip "${vm_name}")"
       if [[ -z "${ip}" ]]; then
-        ip="192.168.64.$(( 10 + idx ))"
+        ip="192.168.252.$(( 10 + idx ))"
       fi
       echo "            ${vm_name}:"
       echo "              ansible_host: \"${ip}\""
       if [[ "${target_group}" == "k8s_control_plane" ]]; then
         echo "              k8s_node_role: control-plane"
-        if [[ ${idx} -eq 0 ]]; then
+        if [[ ${matched} -eq 0 ]]; then
           echo "              k8s_init_node: true"
         else
           echo "              k8s_init_node: false"
@@ -70,8 +97,12 @@ render_group_hosts() {
         echo "              k8s_node_role: worker"
       fi
       idx=$(( idx + 1 ))
+      matched=$(( matched + 1 ))
     fi
   done < "${PROFILE_FILE}"
+  if [[ ${matched} -eq 0 ]]; then
+    echo "            {}"
+  fi
 }
 
 cat > "${OUTPUT_FILE}" <<EOF
@@ -114,4 +145,3 @@ $(render_group_hosts "k8s_workers")
 EOF
 
 echo "[OK] Ansible inventory successfully updated: ${OUTPUT_FILE}"
-
