@@ -308,3 +308,4 @@
       ansible.builtin.debug:
         msg: "[PASS] Kubernetes v{{ k8s_semver }} control plane is initialized and healthy on {{ inventory_hostname }}."
   tags: [kubernetes, validate]
+

@@ -10,3 +10,4 @@ argocd_cli_url: "https://github.com/argoproj/argo-cd/releases/download/{{ argocd
 argocd_primary_cp: "{{ groups['k8s_control_plane'][0] }}"
 argocd_admin_secret: "{{ vault_argocd_admin_password | default('ChangeMe_LocalArgoCDAdmin!2026') }}"
 argocd_nodeport_https: 30443
+

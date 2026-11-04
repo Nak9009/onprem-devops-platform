@@ -103,3 +103,4 @@
           [PASS] Argo CD ({{ argocd_pinned_version }}) is active in namespace '{{ argocd_namespace }}'
           with scoped RBAC and AppProjects (dev-project, staging-project, production-project).
   tags: [argocd, deploy, validate]
+

@@ -6,3 +6,4 @@
     name: rancher
     state: restarted
     daemon_reload: true
+

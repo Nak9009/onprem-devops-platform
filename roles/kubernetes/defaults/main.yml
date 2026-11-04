@@ -20,3 +20,4 @@ k8s_api_endpoint_port: "{{ 8443 if (k8s_is_ha_control_plane and k8s_api_vip is d
 
 # Allow workloads on control-plane when running a single-node cluster (e.g. compact profile)
 k8s_untaint_control_plane: "{{ (k8s_single_node_allow_workloads | default(false) | bool) or (groups['k8s_workers'] | default([]) == groups['k8s_control_plane'] | default([])) }}"
+

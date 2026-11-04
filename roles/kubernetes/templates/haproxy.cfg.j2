@@ -32,3 +32,4 @@ backend k8s_controlplane_nodes
 {% for host in groups['k8s_control_plane'] | default([]) %}
     server {{ host }} {{ hostvars[host]['ansible_default_ipv4']['address'] | default(hostvars[host]['ansible_host']) }}:6443 check fall 3 rise 2
 {% endfor %}
+

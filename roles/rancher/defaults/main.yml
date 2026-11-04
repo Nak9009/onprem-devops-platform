@@ -7,3 +7,4 @@ rancher_data_dir: "/var/lib/rancher"
 rancher_http_host_port: "{{ rancher_http_port | default(80) }}"
 rancher_https_host_port: "{{ rancher_https_port | default(443) }}"
 rancher_bootstrap_secret: "{{ vault_rancher_bootstrap_password | default('ChangeMe_LocalRancherBootstrap!2026') }}"
+

@@ -77,3 +77,4 @@
   ansible.builtin.debug:
     msg: "[PASS] Rancher ({{ rancher_pinned_version }}) is active and healthy at https://{{ rancher_domain }}"
   tags: [rancher, validate]
+

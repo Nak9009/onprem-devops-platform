@@ -63,3 +63,4 @@
       ansible.builtin.debug:
         msg: "[PASS] Calico CNI ({{ calico_pinned_version }}) is active with Pod CIDR {{ calico_pod_cidr }} and all nodes are Ready."
   tags: [calico, deploy, validate]
+

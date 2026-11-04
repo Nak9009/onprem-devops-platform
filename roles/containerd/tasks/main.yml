@@ -83,3 +83,4 @@
   ansible.builtin.debug:
     msg: "[PASS] containerd CRI runtime (SystemdCgroup=true) is active on {{ inventory_hostname }}."
   tags: [containerd, validate]
+

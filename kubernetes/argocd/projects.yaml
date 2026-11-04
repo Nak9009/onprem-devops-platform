@@ -68,3 +68,4 @@ spec:
         - p, proj:production-project:prod-approver, applications, sync, production-project/*, allow
       groups:
         - devops:release-managers
+

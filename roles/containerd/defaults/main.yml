@@ -9,3 +9,4 @@ containerd_nexus_registries:
   - "{{ docker_registry_domain | default('registry.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
   - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_hosted_port | default(5000) }}"
   - "{{ nexus_domain | default('nexus.devops.local') }}:{{ nexus_docker_group_port | default(5001) }}"
+
