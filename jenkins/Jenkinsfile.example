@@ -27,7 +27,7 @@ pipeline {
     }
 
     environment {
-        APP_NAME          = 'sample-api'
+        APP_NAME          = 'api'
         APP_VERSION       = '1.0.0'
         NEXUS_REGISTRY    = "${env.NEXUS_REGISTRY_HOST ?: 'registry.devops.local:5000'}"
         GITLAB_HOST       = "${env.GITLAB_HOST ?: 'gitlab.devops.local'}"

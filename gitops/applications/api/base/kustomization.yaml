@@ -1,0 +1,17 @@
+---
+# gitops/applications/api/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: api
+      app.kubernetes.io/part-of: onprem-devops-platform
+      tier: backend
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - pdb.yaml

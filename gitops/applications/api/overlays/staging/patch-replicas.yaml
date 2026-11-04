@@ -1,0 +1,9 @@
+---
+# gitops/applications/api/overlays/staging/patch-replicas.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+

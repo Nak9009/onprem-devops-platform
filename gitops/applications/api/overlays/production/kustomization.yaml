@@ -1,0 +1,19 @@
+---
+# gitops/applications/api/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+namePrefix: prod-
+
+resources:
+  - ../../base
+
+images:
+  - name: registry.devops.local:5000/api
+    newName: registry.internal.example.com:5000/api
+    newTag: "1.0.0-a1b2c3d4"
+
+patches:
+  - path: patch-replicas.yaml
+

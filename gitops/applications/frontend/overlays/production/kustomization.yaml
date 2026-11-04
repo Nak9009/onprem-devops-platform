@@ -1,0 +1,16 @@
+---
+# gitops/applications/frontend/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+namePrefix: prod-
+
+resources:
+  - ../../base
+
+images:
+  - name: registry.devops.local:5000/frontend
+    newName: registry.internal.example.com:5000/frontend
+    newTag: "1.0.0-a1b2c3d4"
+

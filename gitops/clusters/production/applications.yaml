@@ -1,0 +1,64 @@
+---
+# gitops/clusters/production/applications.yaml
+# Argo CD Application Definitions for Production Environment
+# IMPORTANT: 'automated' sync is INTENTIONALLY OMITTED for production workloads.
+# Production deployments require manual approval by 'devops:release-managers' after GitOps commit.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-production
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: prod-releases
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: prod-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: production-project
+  source:
+    repoURL: https://gitlab.internal.example.com/devops/gitops.git
+    targetRevision: main
+    path: gitops/applications/api/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  # Manual approval gate: No 'automated' block here!
+  syncPolicy:
+    syncOptions:
+      - Validate=true
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: frontend-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: production-project
+  source:
+    repoURL: https://gitlab.internal.example.com/devops/gitops.git
+    targetRevision: main
+    path: gitops/applications/frontend/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  # Manual approval gate: No 'automated' block here!
+  syncPolicy:
+    syncOptions:
+      - Validate=true
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
