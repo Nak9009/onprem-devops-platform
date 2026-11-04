@@ -1,0 +1,35 @@
+---
+# roles/backup/tasks/main.yml
+# Configures independent Backup Infrastructure outside the Application Kubernetes Cluster
+
+- name: Install backup utilities (pgbackrest, restic, rsync, jq)
+  ansible.builtin.apt:
+    name:
+      - pgbackrest
+      - restic
+      - rsync
+      - jq
+      - tar
+      - gzip
+    state: present
+    update_cache: true
+
+- name: Create isolated backup repository directories for all platform components
+  ansible.builtin.file:
+    path: "{{ backup_root_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - gitlab
+    - jenkins
+    - nexus
+    - postgresql
+    - minio
+    - k8s-mgmt-etcd
+    - k8s-app-etcd
+    - rancher
+    - argocd
+    - gitops-repos
+

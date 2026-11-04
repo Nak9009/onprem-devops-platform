@@ -1,0 +1,58 @@
+---
+# roles/jenkins-agent/tasks/main.yml
+# Configures dedicated Jenkins Build Agent VMs outside Kubernetes with Rootless Buildah/Podman & Trivy
+
+- name: Install Jenkins Agent dependencies and rootless container build tools
+  ansible.builtin.apt:
+    name:
+      - "{{ jenkins_agent_java_package }}"
+      - git
+      - curl
+      - jq
+      - buildah
+      - podman
+      - skopeo
+      - uidmap
+      - slirp4netns
+      - fuse-overlayfs
+    state: present
+    update_cache: true
+
+- name: Create jenkins-agent system group
+  ansible.builtin.group:
+    name: "{{ jenkins_agent_user }}"
+    system: true
+    state: present
+
+- name: Create jenkins-agent user and workspace home
+  ansible.builtin.user:
+    name: "{{ jenkins_agent_user }}"
+    group: "{{ jenkins_agent_user }}"
+    home: "{{ jenkins_agent_home }}"
+    create_home: true
+    shell: /bin/bash
+    system: true
+    state: present
+
+- name: Configure subordinate UID and GID ranges for rootless Buildah/Podman
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: "^{{ jenkins_agent_user }}:"
+    line: "{{ jenkins_agent_user }}:165536:65536"
+    create: true
+    mode: "0644"
+  loop:
+    - /etc/subuid
+    - /etc/subgid
+
+- name: Configure Nexus private registry for Buildah/Podman on Jenkins Agent
+  ansible.builtin.copy:
+    dest: /etc/containers/registries.conf.d/99-nexus.conf
+    mode: "0644"
+    content: |
+      # Managed by Ansible - Nexus Private Container Registry
+      [[registry]]
+      location = "{{ hostvars[groups['nexus'][0]]['ansible_host'] | default('127.0.0.1') }}:{{ nexus_registry_port }}"
+      insecure = true
+  when: groups['nexus'] is defined and (groups['nexus'] | length > 0)
+

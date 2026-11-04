@@ -1,0 +1,8 @@
+---
+# roles/redis/defaults/main.yml
+redis_port: 6379
+redis_sentinel_port: 26379
+redis_exporter_port: 9121
+redis_maxmemory: "512mb"
+redis_maxmemory_policy: "allkeys-lru"
+

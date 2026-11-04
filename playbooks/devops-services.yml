@@ -1,0 +1,30 @@
+---
+# playbooks/devops-services.yml
+# Layer 1 DevOps Services (Outside Application Kubernetes Cluster):
+# GitLab CE, Jenkins LTS Controller, Dedicated Jenkins Build Agents, and Sonatype Nexus
+
+- name: "Layer 1 DevOps: GitLab CE SCM"
+  ansible.builtin.import_playbook: gitlab.yml
+  tags: [devops, gitlab]
+
+- name: "Layer 1 DevOps: Sonatype Nexus Artifact & Container Registry"
+  ansible.builtin.import_playbook: nexus.yml
+  tags: [devops, nexus]
+
+- name: "Layer 1 DevOps: Jenkins LTS CI Controller"
+  ansible.builtin.import_playbook: jenkins.yml
+  tags: [devops, jenkins]
+
+- name: "Layer 1 DevOps: Dedicated Jenkins Build Agents (Rootless Buildah + Trivy)"
+  hosts: jenkins_agents
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      failed_when: false
+  roles:
+    - role: jenkins-agent
+      tags: [devops, jenkins_agents]
+

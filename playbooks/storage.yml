@@ -1,0 +1,16 @@
+---
+# playbooks/storage.yml
+# Layer 1 Dedicated S3 / MinIO Object Storage & Independent Backup Infrastructure
+
+- name: "Layer 1 Storage: MinIO S3 Object Storage (Single or 4-Node Distributed)"
+  ansible.builtin.import_playbook: minio.yml
+  tags: [storage, minio]
+
+- name: "Layer 1 Backup: Independent Platform Backup Repository"
+  hosts: backup_services
+  become: true
+  gather_facts: true
+  roles:
+    - role: backup
+      tags: [storage, backup]
+

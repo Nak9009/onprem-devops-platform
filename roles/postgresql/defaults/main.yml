@@ -1,0 +1,9 @@
+---
+# roles/postgresql/defaults/main.yml
+postgresql_version: "16"
+postgresql_port: 5432
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+postgresql_wal_dir: "/var/lib/postgresql/wal"
+pgbackrest_stanza: "main"
+postgres_exporter_port: 9187
+

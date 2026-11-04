@@ -1,0 +1,22 @@
+---
+# playbooks/application-cluster.yml
+# Layer 3 Application Kubernetes Cluster (k8s_app_cluster):
+# Runs Business Applications ONLY (No GitLab, Jenkins, Nexus, PG, MinIO, Redis, Rancher, or Argo CD)
+
+- name: "Layer 3 Application K8s Cluster: containerd, HA kubeadm & Calico CNI"
+  hosts: k8s_app_cluster
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      failed_when: false
+  roles:
+    - role: containerd
+      tags: [application_cluster, containerd]
+    - role: kubernetes
+      tags: [application_cluster, kubernetes]
+    - role: calico
+      tags: [application_cluster, calico]
+

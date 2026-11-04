@@ -1,0 +1,33 @@
+---
+# playbooks/management-cluster.yml
+# Layer 2 Dedicated Kubernetes Management Cluster (k8s_mgmt_cluster):
+# Runs Rancher & Argo CD ONLY — Completely independent of the Application Cluster.
+
+- name: "Layer 2 Management K8s Cluster: containerd, kubeadm & Calico CNI"
+  hosts: k8s_mgmt_cluster
+  become: true
+  gather_facts: true
+  vars:
+    pod_cidr: "{{ mgmt_pod_cidr | default('10.243.0.0/16') }}"
+    service_cidr: "{{ mgmt_service_cidr | default('10.95.0.0/12') }}"
+    cluster_name: "{{ mgmt_cluster_name | default('onprem-mgmt-k8s') }}"
+    k8s_single_node_allow_workloads: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      failed_when: false
+  roles:
+    - role: containerd
+      tags: [management_cluster, containerd]
+    - role: kubernetes
+      tags: [management_cluster, kubernetes]
+    - role: calico
+      tags: [management_cluster, calico]
+    - role: argocd
+      tags: [management_cluster, argocd]
+
+- name: "Layer 2 Management K8s Cluster: Rancher Server"
+  ansible.builtin.import_playbook: rancher.yml
+  tags: [management_cluster, rancher]
+

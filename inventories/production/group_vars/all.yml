@@ -1,8 +1,8 @@
 ---
 # inventories/production/group_vars/all.yml
-# Production VMware Environment Variables
+# Production VMware Environment Variables (3-Layer Architecture across VLANs 10-80)
 
-environment: production
+environment_name: production
 deployment_mode: vmware
 
 # System & Regional Settings
@@ -20,11 +20,18 @@ ssh_disable_password_auth: true
 ssh_permit_root_login: "no"
 ssh_public_key_path: "~/.ssh/id_ed25519.pub"
 
-# Host Firewall (UFW)
+# Host Firewall (UFW) & 8-VLAN Subnets (Placeholders)
 ufw_enabled: true
 ufw_default_incoming_policy: deny
 ufw_default_outgoing_policy: allow
-management_subnet: "10.20.0.0/16"
+management_subnet: "10.20.10.0/24"
+devops_subnet: "10.20.20.0/24"
+k8s_mgmt_subnet: "10.20.30.0/24"
+k8s_app_subnet: "10.20.40.0/24"
+database_subnet: "10.20.50.0/24"
+storage_subnet: "10.20.60.0/24"
+monitoring_subnet: "10.20.70.0/24"
+backup_subnet: "10.20.80.0/24"
 
 # Pinned Software Versions (Identical to Local Testing for Parity)
 os_release_supported: "24.04"
@@ -36,13 +43,21 @@ kubernetes_minor_channel: "v1.31"
 calico_version: "v3.29.1"
 gitlab_version: "17.7.1-ce.0"
 jenkins_version: "2.479.3"
-java_package: "openjdk-21-jre-headless"
+java_package: "openjdk-17-jre-headless"
 nexus_version: "3.75.1-01"
 rancher_version: "v2.10.1"
 argocd_version: "v2.13.2"
 minio_version: "RELEASE.2024-12-18T13-15-44Z"
+minio_deployment_mode: "distributed"
+minio_distributed_volumes: "http://10.20.60.{11...14}:9000/data/disk{1...2}/minio"
+postgresql_version: "16"
+patroni_version: "3.3.2"
+pgbackrest_version: "2.52.1"
+redis_version: "7.4"
 prometheus_version: "2.53.3"
 node_exporter_version: "1.8.2"
+postgres_exporter_version: "0.15.0"
+redis_exporter_version: "1.62.0"
 alertmanager_version: "0.27.0"
 grafana_version: "11.4.0"
 loki_version: "3.3.2"
@@ -51,14 +66,32 @@ trivy_version: "0.58.1"
 sonarqube_version: "10.8.1-community"
 vault_version: "1.18.3"
 
-# Kubernetes Networking (Confirm non-overlapping with corporate VLANs 10.20.0.0/16)
+# Layer 2: Dedicated Management Kubernetes Cluster (VLAN 30)
+mgmt_cluster_name: "onprem-prod-mgmt-k8s"
+mgmt_pod_cidr: "10.243.0.0/16"
+mgmt_service_cidr: "10.95.0.0/12"
+k8s_mgmt_api_vip: "10.20.30.10"
+k8s_mgmt_control_plane_endpoint: "k8s-mgmt-api.{{ domain }}:8443"
+
+# Layer 3: Application Kubernetes Cluster (VLAN 40 — Business Workloads Only)
+cluster_name: "onprem-prod-app-k8s"
 pod_cidr: "10.244.0.0/16"
 service_cidr: "10.96.0.0/12"
 cluster_dns_ip: "10.96.0.10"
-cluster_name: "onprem-prod-k8s"
-k8s_control_plane_endpoint: "k8s-api.{{ domain }}:6443"
-k8s_api_vip: "10.20.20.20"
+k8s_api_vip: "10.20.40.10"
+k8s_control_plane_endpoint: "k8s-app-api.{{ domain }}:8443"
+k8s_app_ingress_vip: "10.20.40.20"
 k8s_single_node_allow_workloads: false
+
+# Layer 1B: PostgreSQL 16 HA & Redis Settings (VLAN 50)
+pg_cluster_name: "pg-ha-cluster"
+pg_rw_vip: "10.20.50.10"
+pg_ro_vip: "10.20.50.15"
+pg_rw_port: 5432
+pg_ro_port: 5433
+pg_patroni_port: 8008
+redis_port: 6379
+redis_sentinel_port: 26379
 
 # Service FQDNs
 gitlab_domain: "gitlab.{{ domain }}"
@@ -67,13 +100,16 @@ nexus_domain: "nexus.{{ domain }}"
 docker_registry_domain: "registry.{{ domain }}"
 rancher_domain: "rancher.{{ domain }}"
 argocd_domain: "argocd.{{ domain }}"
-minio_domain: "minio.{{ domain }}"
-minio_console_domain: "s3-console.{{ domain }}"
+minio_domain: "s3.{{ domain }}"
+minio_console_domain: "minio-console.{{ domain }}"
 prometheus_domain: "prometheus.{{ domain }}"
 grafana_domain: "grafana.{{ domain }}"
 loki_domain: "loki.{{ domain }}"
 sonarqube_domain: "sonar.{{ domain }}"
 vault_domain: "vault.{{ domain }}"
+pg_rw_domain: "pg-rw.{{ domain }}"
+pg_ro_domain: "pg-ro.{{ domain }}"
+redis_domain: "redis.{{ domain }}"
 
 # Service Ports
 gitlab_http_port: 80
@@ -97,4 +133,3 @@ min_cpu_cores: 2
 min_memory_mb: 3800
 min_disk_gb: 40
 enable_swap_for_k8s: false
-

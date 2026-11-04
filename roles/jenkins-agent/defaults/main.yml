@@ -1,0 +1,8 @@
+---
+# roles/jenkins-agent/defaults/main.yml
+jenkins_agent_user: jenkins-agent
+jenkins_agent_home: /var/lib/jenkins-agent
+jenkins_agent_java_package: "{{ java_package | default('openjdk-17-jre-headless') }}"
+trivy_version: "0.58.1"
+nexus_registry_port: "{{ nexus_docker_hosted_port | default(5000) }}"
+

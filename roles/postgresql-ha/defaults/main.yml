@@ -1,0 +1,10 @@
+---
+# roles/postgresql-ha/defaults/main.yml
+pg_cluster_name: "pg-ha-cluster"
+pg_patroni_port: 8008
+pg_rw_port: 5432
+pg_ro_port: 5433
+pgbackrest_stanza: "main"
+pgbackrest_retention_full: 2
+pgbackrest_retention_diff: 7
+

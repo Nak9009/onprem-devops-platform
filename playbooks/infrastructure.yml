@@ -1,0 +1,12 @@
+---
+# playbooks/infrastructure.yml
+# Layer 1, 2 & 3 OS Baseline, Kernel Hardening, NTP, SSH, UFW, auditd & Vault
+
+- name: "Infrastructure Baseline: Ubuntu 24.04 Common Hardening"
+  ansible.builtin.import_playbook: common.yml
+  tags: [infrastructure, common]
+
+- name: "Infrastructure Security: Auditd & HashiCorp Vault"
+  ansible.builtin.import_playbook: security.yml
+  tags: [infrastructure, security]
+

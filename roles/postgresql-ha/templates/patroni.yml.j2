@@ -1,0 +1,56 @@
+# Managed by Ansible - Patroni PostgreSQL 16 HA Configuration
+scope: {{ pg_cluster_name }}
+namespace: /service/
+name: {{ inventory_hostname }}
+
+restapi:
+  listen: 0.0.0.0:{{ pg_patroni_port }}
+  connect_address: {{ ansible_host }}:{{ pg_patroni_port }}
+
+etcd3:
+  hosts:
+{% for host in groups['postgresql_ha'] | default([inventory_hostname]) %}
+    - {{ hostvars[host]['ansible_host'] }}:2379
+{% endfor %}
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: {{ (groups['postgresql_ha'] | default([]) | length > 1) | lower }}
+    synchronous_mode_strict: false
+    synchronous_node_count: 1
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        max_connections: 200
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        archive_mode: "on"
+        archive_timeout: 60s
+        archive_command: "pgbackrest --stanza={{ pgbackrest_stanza | default('main') }} archive-push %p"
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: {{ ansible_host }}:5432
+  data_dir: /var/lib/postgresql/16/patroni
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    replication:
+      username: replicator
+      password: "{{ vault_postgres_repl_password | default('ChangeMe_ReplPass_2026!') }}"
+    superuser:
+      username: postgres
+      password: "{{ vault_postgres_admin_password | default('ChangeMe_PostgresAdmin_2026!') }}"
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: {{ 'true' if (pg_ha_role | default('leader')) == 'async_replica' else 'false' }}
+

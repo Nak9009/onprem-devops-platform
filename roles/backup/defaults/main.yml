@@ -1,0 +1,5 @@
+---
+# roles/backup/defaults/main.yml
+backup_root_dir: /var/backups/devops-platform
+backup_retention_days: 30
+

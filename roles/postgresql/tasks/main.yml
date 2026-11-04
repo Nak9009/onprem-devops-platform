@@ -1,0 +1,49 @@
+---
+# roles/postgresql/tasks/main.yml
+# Installs PostgreSQL 16 engine, pgBackRest, and Prometheus Postgres Exporter on dedicated DB VMs
+
+- name: Install PostgreSQL 16, pgBackRest, and Prometheus Postgres Exporter
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+      - "postgresql-contrib-{{ postgresql_version }}"
+      - pgbackrest
+      - prometheus-postgres-exporter
+      - python3-psycopg2
+    state: present
+    update_cache: true
+
+- name: Ensure PostgreSQL data, WAL, and pgBackRest directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  loop:
+    - "{{ postgresql_wal_dir }}"
+    - /var/lib/pgbackrest
+    - /var/log/pgbackrest
+    - /etc/pgbackrest
+
+- name: Open PostgreSQL (5432) and Postgres Exporter (9187) ports in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "{{ postgresql_port }}", comment: "PostgreSQL Database" }
+    - { port: "{{ postgres_exporter_port }}", comment: "Prometheus Postgres Exporter" }
+  when: ufw_enabled | default(true) | bool
+
+- name: Ensure postgresql and prometheus-postgres-exporter services are running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - postgresql
+    - prometheus-postgres-exporter
+

@@ -1,8 +1,8 @@
 ---
 # inventories/local/group_vars/all.yml
-# Local Multipass Testing Environment Variables
+# Local Multipass Testing Environment Variables (3-Layer Architecture)
 
-environment: local
+environment_name: local
 deployment_mode: multipass
 local_profile: "{{ lookup('env', 'MULTIPASS_PROFILE') | default('minimal', true) }}"
 
@@ -37,13 +37,20 @@ kubernetes_minor_channel: "v1.31"
 calico_version: "v3.29.1"
 gitlab_version: "17.7.1-ce.0"
 jenkins_version: "2.479.3"
-java_package: "openjdk-21-jre-headless"
+java_package: "openjdk-17-jre-headless"
 nexus_version: "3.75.1-01"
 rancher_version: "v2.10.1"
 argocd_version: "v2.13.2"
 minio_version: "RELEASE.2024-12-18T13-15-44Z"
+minio_deployment_mode: "single"
+postgresql_version: "16"
+patroni_version: "3.3.2"
+pgbackrest_version: "2.52.1"
+redis_version: "7.4"
 prometheus_version: "2.53.3"
 node_exporter_version: "1.8.2"
+postgres_exporter_version: "0.15.0"
+redis_exporter_version: "1.62.0"
 alertmanager_version: "0.27.0"
 grafana_version: "11.4.0"
 loki_version: "3.3.2"
@@ -52,12 +59,25 @@ trivy_version: "0.58.1"
 sonarqube_version: "10.8.1-community"
 vault_version: "1.18.3"
 
-# Kubernetes Networking (Verified non-overlapping with Multipass 192.168.64.0/24)
+# Layer 2: Management Kubernetes Cluster Networking
+mgmt_cluster_name: "onprem-local-mgmt-k8s"
+mgmt_pod_cidr: "10.243.0.0/16"
+mgmt_service_cidr: "10.95.0.0/12"
+
+# Layer 3: Application Kubernetes Cluster Networking
+cluster_name: "onprem-local-app-k8s"
 pod_cidr: "10.244.0.0/16"
 service_cidr: "10.96.0.0/12"
 cluster_dns_ip: "10.96.0.10"
-cluster_name: "onprem-local-k8s"
-k8s_single_node_allow_workloads: false
+k8s_single_node_allow_workloads: true
+
+# Layer 1B: PostgreSQL HA & Redis Settings
+pg_cluster_name: "pg-ha-cluster"
+pg_rw_port: 5432
+pg_ro_port: 5433
+pg_patroni_port: 8008
+redis_port: 6379
+redis_sentinel_port: 26379
 
 # Service FQDNs
 gitlab_domain: "gitlab.{{ domain }}"
@@ -73,6 +93,9 @@ grafana_domain: "grafana.{{ domain }}"
 loki_domain: "loki.{{ domain }}"
 sonarqube_domain: "sonar.{{ domain }}"
 vault_domain: "vault.{{ domain }}"
+pg_rw_domain: "pg-rw.{{ domain }}"
+pg_ro_domain: "pg-ro.{{ domain }}"
+redis_domain: "redis.{{ domain }}"
 
 # Service Ports
 gitlab_http_port: 80
@@ -96,4 +119,3 @@ min_cpu_cores: 1
 min_memory_mb: 1400
 min_disk_gb: 15
 enable_swap_for_k8s: false
-

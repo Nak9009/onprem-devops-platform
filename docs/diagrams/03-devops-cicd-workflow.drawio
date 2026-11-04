@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-11-04T15:30:00.000Z" agent="OnPrem-DevOps-Architect" version="24.7.0" type="device">
+  <diagram id="03.-end-to-end-10-step-devops-ci/cd-&amp;-gitops-workflow" name="03. End-to-End 10-Step DevOps CI/CD &amp; GitOps Workflow">
+    <mxGraphModel dx="1422" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="03. End-to-End 10-Step DevOps CI/CD &amp; GitOps Workflow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a365d;strokeColor=#0f172a;fontColor=#ffffff;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="20" width="1480" height="45" as="geometry" /></mxCell>
+        <mxCell id="layer1_devops" value="Layer 1A: DevOps Services Outside K8s (VLAN 20: 10.20.20.0/24)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;startSize=32;fontStyle=1;fontSize=13;rounded=1;" vertex="1" parent="1"><mxGeometry x="40" y="85" width="720" height="260" as="geometry" /></mxCell>
+        <mxCell id="layer1_data" value="Layer 1B: External Databases, Storage, Monitoring &amp; Backup (VLANs 50/60/70/80)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;startSize=32;fontStyle=1;fontSize=13;rounded=1;" vertex="1" parent="1"><mxGeometry x="800" y="85" width="720" height="260" as="geometry" /></mxCell>
+        <mxCell id="layer2_mgmt" value="Layer 2: Dedicated Kubernetes Management Cluster (VLAN 30: 10.20.30.0/24)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;startSize=32;fontStyle=1;fontSize=13;rounded=1;" vertex="1" parent="1"><mxGeometry x="40" y="380" width="720" height="280" as="geometry" /></mxCell>
+        <mxCell id="layer3_app" value="Layer 3: Application Kubernetes Cluster - Business Apps Only (VLAN 40: 10.20.40.0/24)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;startSize=32;fontStyle=1;fontSize=13;rounded=1;" vertex="1" parent="1"><mxGeometry x="800" y="380" width="720" height="280" as="geometry" /></mxCell>
+        <mxCell id="gitlab" value="GitLab CE 17.7.1
+Dedicated VM (prod-gitlab-01)
+10.20.20.10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_devops"><mxGeometry x="25" y="55" width="200" height="75" as="geometry" /></mxCell>
+        <mxCell id="jenkins" value="Jenkins Controller 2.479.3
+Dedicated VM (prod-jenkins-01)
+10.20.20.11" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_devops"><mxGeometry x="255" y="55" width="200" height="75" as="geometry" /></mxCell>
+        <mxCell id="jagent" value="Jenkins Build Agents
+Rootless Buildah + Trivy
+10.20.20.12-13" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_devops"><mxGeometry x="485" y="55" width="200" height="75" as="geometry" /></mxCell>
+        <mxCell id="nexus" value="Sonatype Nexus 3.75.1
+Docker &amp; Artifact Registry
+10.20.20.14 (:8081/:5000)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_devops"><mxGeometry x="255" y="155" width="200" height="75" as="geometry" /></mxCell>
+        <mxCell id="pg_ha" value="PostgreSQL 16 HA (VLAN 50)
+pg-db1 (Leader) | pg-db2 (Sync) | pg-db3 (Async)
+Patroni + etcd + HAProxy VIP 10.20.50.10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_data"><mxGeometry x="25" y="55" width="320" height="80" as="geometry" /></mxCell>
+        <mxCell id="redis" value="Redis 7.4 Cache/Queues
+Dedicated VMs (VLAN 50)
+10.20.50.21-23" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_data"><mxGeometry x="375" y="55" width="315" height="80" as="geometry" /></mxCell>
+        <mxCell id="minio" value="MinIO S3 Storage (VLAN 60)
+4-Node Distributed Erasure Coding
+VIP 10.20.60.10:9000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_data"><mxGeometry x="25" y="155" width="210" height="80" as="geometry" /></mxCell>
+        <mxCell id="monitor" value="Prometheus + Grafana + Loki
+Independent Monitoring (VLAN 70)
+10.20.70.10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_data"><mxGeometry x="255" y="155" width="210" height="80" as="geometry" /></mxCell>
+        <mxCell id="backup" value="Backup Server (VLAN 80)
+pgBackRest + Restic + Snapshots
+10.20.80.10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;fontStyle=0;" vertex="1" parent="layer1_data"><mxGeometry x="485" y="155" width="205" height="80" as="geometry" /></mxCell>
+        <mxCell id="mgmt_cp" value="Management K8s Control Plane
+prod-k8s-mgmt-cp01..03
+VIP 10.20.30.10:8443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;fontStyle=0;" vertex="1" parent="layer2_mgmt"><mxGeometry x="25" y="60" width="210" height="180" as="geometry" /></mxCell>
+        <mxCell id="rancher" value="Rancher Server v2.10.1
+Multi-Cluster Management
+(Runs in Mgmt K8s Cluster)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;fontStyle=0;" vertex="1" parent="layer2_mgmt"><mxGeometry x="260" y="60" width="210" height="180" as="geometry" /></mxCell>
+        <mxCell id="argocd" value="Argo CD v2.13.2
+GitOps CD Controller
+(Runs in Mgmt K8s Cluster)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;fontStyle=0;" vertex="1" parent="layer2_mgmt"><mxGeometry x="490" y="60" width="205" height="180" as="geometry" /></mxCell>
+        <mxCell id="app_cp" value="App K8s Control Plane (3 Nodes)
+prod-k8s-app-cp01..03
+API VIP 10.20.40.10:8443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;fontStyle=0;" vertex="1" parent="layer3_app"><mxGeometry x="25" y="60" width="210" height="180" as="geometry" /></mxCell>
+        <mxCell id="app_wk" value="App K8s Workers (3+ Nodes)
+Calico CNI + Ingress NGINX
+Ingress VIP 10.20.40.20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;fontStyle=0;" vertex="1" parent="layer3_app"><mxGeometry x="255" y="60" width="210" height="180" as="geometry" /></mxCell>
+        <mxCell id="biz_apps" value="Business Workloads ONLY:
+Frontend, Backend APIs, Laravel,
+Node.js, Microservices, Workers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;fontStyle=0;" vertex="1" parent="layer3_app"><mxGeometry x="485" y="60" width="210" height="180" as="geometry" /></mxCell>
+        <mxCell id="e1" value="1. Webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="gitlab" target="jenkins"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="2. Dispatch CI" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="jenkins" target="jagent"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="3. Push OCI Image" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="jagent" target="nexus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="4. Update GitOps Tag" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="jagent" target="gitlab"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="5. Poll GitOps Repo" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="argocd" target="gitlab"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="6. Deploy to App Cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="argocd" target="app_cp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="Manage App Cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="rancher" target="app_cp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="7. Pull Image" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="app_wk" target="nexus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="TCP 5432 (VIP)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="biz_apps" target="pg_ha"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="TCP 6379" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="biz_apps" target="redis"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="HTTPS 9000 (S3)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="biz_apps" target="minio"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="Scrape Metrics/Logs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="monitor" target="app_wk"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="pgBackRest WAL/PITR" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#334155;fontSize=10;" edge="1" parent="1" source="backup" target="pg_ha"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

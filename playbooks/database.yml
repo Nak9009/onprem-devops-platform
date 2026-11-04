@@ -1,0 +1,33 @@
+---
+# playbooks/database.yml
+# Layer 1 Dedicated Database Infrastructure (Outside Application Kubernetes Cluster):
+# PostgreSQL 16 HA (pg-db1 Leader, pg-db2 Sync Standby, pg-db3 Async Replica) + Redis
+
+- name: "Layer 1 Database: PostgreSQL 16 HA Cluster (Patroni + etcd + HAProxy + pgBackRest)"
+  hosts: postgresql_ha
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      failed_when: false
+  roles:
+    - role: postgresql
+      tags: [database, postgresql]
+    - role: postgresql-ha
+      tags: [database, postgresql_ha]
+
+- name: "Layer 1 Database: Dedicated Redis Cache, Queues & Sessions"
+  hosts: redis
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Load encrypted vault variables if vault.yml exists
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/group_vars/vault.yml"
+      failed_when: false
+  roles:
+    - role: redis
+      tags: [database, redis]
+

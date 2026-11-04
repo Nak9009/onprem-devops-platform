@@ -1,52 +1,38 @@
 ---
 # playbooks/site.yml
-# Master Orchestration Playbook for On-Premises DevOps Platform
-# Executes all phased playbooks in dependency order across Local or Production inventories.
+# Master 3-Layer Orchestration Playbook for On-Premises DevOps Platform
+# Executes Layer 1 (Infrastructure, DevOps, DB HA, Storage, Monitoring),
+# Layer 2 (Management Kubernetes Cluster with Rancher + Argo CD), and
+# Layer 3 (Application Kubernetes Cluster for Business Workloads Only).
 
-- name: "Phase 1/2: Common OS Baseline & Hardening"
-  ansible.builtin.import_playbook: common.yml
-  tags: [phase1, phase2, common]
+- name: "Phase 1 & 2: OS Baseline, Kernel Hardening, UFW & Security"
+  ansible.builtin.import_playbook: infrastructure.yml
+  tags: [phase1, phase2, infrastructure]
 
-- name: "Phase 3a: GitLab CE Source Control"
-  ansible.builtin.import_playbook: gitlab.yml
-  tags: [phase3, gitlab]
+- name: "Phase 3a: Layer 1 DevOps Services (GitLab, Nexus, Jenkins & Agents)"
+  ansible.builtin.import_playbook: devops-services.yml
+  tags: [phase3, devops]
 
-- name: "Phase 3b: Sonatype Nexus Repository & Private Docker Registry"
-  ansible.builtin.import_playbook: nexus.yml
-  tags: [phase3, nexus]
+- name: "Phase 3b: Layer 1 Database HA (PostgreSQL pg-db1..3 + Redis)"
+  ansible.builtin.import_playbook: database.yml
+  tags: [phase3, database]
 
-- name: "Phase 3c: MinIO S3 Object Storage"
-  ansible.builtin.import_playbook: minio.yml
-  tags: [phase3, minio]
+- name: "Phase 3c: Layer 1 Object Storage (MinIO S3) & Independent Backup"
+  ansible.builtin.import_playbook: storage.yml
+  tags: [phase3, storage]
 
-- name: "Phase 3d: Jenkins LTS CI Server"
-  ansible.builtin.import_playbook: jenkins.yml
-  tags: [phase3, jenkins]
+- name: "Phase 4a: Layer 2 Dedicated Kubernetes Management Cluster (Rancher + Argo CD)"
+  ansible.builtin.import_playbook: management-cluster.yml
+  tags: [phase4, management_cluster]
 
-- name: "Phase 4a: Containerd CRI & Kubernetes Cluster"
-  ansible.builtin.import_playbook: kubernetes.yml
-  tags: [phase4, kubernetes]
+- name: "Phase 4b: Layer 3 Application Kubernetes Cluster (Business Workloads Only)"
+  ansible.builtin.import_playbook: application-cluster.yml
+  tags: [phase4, application_cluster]
 
-- name: "Phase 4b: Calico CNI Networking & NetworkPolicy Engine"
-  ansible.builtin.import_playbook: calico.yml
-  tags: [phase4, calico]
-
-- name: "Phase 4c: Rancher Cluster Management"
-  ansible.builtin.import_playbook: rancher.yml
-  tags: [phase4, rancher]
-
-- name: "Phase 4d: Argo CD GitOps Controller"
-  ansible.builtin.import_playbook: argocd.yml
-  tags: [phase4, argocd]
-
-- name: "Phase 6a: Prometheus & Grafana Monitoring Stack"
+- name: "Phase 6a: Layer 1 Independent Monitoring (Prometheus + Grafana)"
   ansible.builtin.import_playbook: monitoring.yml
   tags: [phase6, monitoring]
 
-- name: "Phase 6b: Grafana Loki & Promtail Centralized Logging"
+- name: "Phase 6b: Layer 1 Independent Centralized Logging (Loki + Promtail)"
   ansible.builtin.import_playbook: logging.yml
   tags: [phase6, logging]
-
-- name: "Phase 6c: Platform Security Hardening & HashiCorp Vault"
-  ansible.builtin.import_playbook: security.yml
-  tags: [phase6, security]

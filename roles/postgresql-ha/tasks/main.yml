@@ -1,0 +1,56 @@
+---
+# roles/postgresql-ha/tasks/main.yml
+# Configures 3-Node PostgreSQL HA (pg-db1 Leader, pg-db2 Sync Standby, pg-db3 Async Replica)
+# with Patroni, etcd quorum, HAProxy RW/RO routing, Keepalived VIP, and pgBackRest PITR.
+
+- name: Install Patroni, etcd, HAProxy, and Keepalived for PostgreSQL HA
+  ansible.builtin.apt:
+    name:
+      - patroni
+      - etcd-server
+      - etcd-client
+      - haproxy
+      - keepalived
+      - pgbackrest
+    state: present
+    update_cache: true
+
+- name: Ensure /etc/patroni and /etc/pgbackrest directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  loop:
+    - /etc/patroni
+    - /etc/pgbackrest
+
+- name: Render Patroni HA configuration (/etc/patroni/patroni.yml)
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: postgres
+    group: postgres
+    mode: "0600"
+
+- name: Render pgBackRest configuration (/etc/pgbackrest/pgbackrest.conf)
+  ansible.builtin.template:
+    src: pgbackrest.conf.j2
+    dest: /etc/pgbackrest/pgbackrest.conf
+    owner: postgres
+    group: postgres
+    mode: "0640"
+
+- name: Open Patroni REST API (8008), etcd (2379-2380), and HAProxy RO (5433) ports in UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: tcp
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: "{{ pg_patroni_port }}", comment: "Patroni REST API" }
+    - { port: "2379:2380", comment: "etcd Quorum Client/Peer" }
+    - { port: "{{ pg_ro_port }}", comment: "PostgreSQL HA Read-Only Port" }
+  when: ufw_enabled | default(true) | bool
+
