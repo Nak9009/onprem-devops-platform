@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- MANDATORY: Declare support for both light and dark themes -->
+  <meta name="color-scheme" content="light dark">
+  <script>
+    try {
+      document.querySelector('meta[name="color-scheme"]').content = localStorage.getItem("color-scheme") ?? "light dark";
+    } catch (_) {}
+  </script>
+  <title>On-Premises DevOps Platform — Complete Local &amp; Production Implementation Guide</title>
+  <style>
+    :root {
+      /* High-contrast, perceptually balanced Light & Dark color tokens */
+      --bg-light: #f4f6fb;
+      --bg-dark: #070b14;
+      --surface-light: #ffffff;
+      --surface-dark: #0f172a;
+      --surface-alt-light: #eef2f9;
+      --surface-alt-dark: #182235;
+      --surface-elevated-light: #e2e8f0;
+      --surface-elevated-dark: #1e293b;
+
+      --text-light: #0f172a;
+      --text-dark: #f8fafc;
+      --muted-light: #334155;
+      --muted-dark: #cbd5e1;
+
+      /* Subtle structural border + >= 3:1 interactive control border */
+      --border-light: #cbd5e1;
+      --border-dark: #283548;
+      --border-strong-light: #64748b;
+      --border-strong-dark: #64748b;
+
+      --brand-light: #1d4ed8;
+      --brand-dark: #60a5fa;
+      --brand-contrast-light: #ffffff;
+      --brand-contrast-dark: #071126;
+      --brand-soft-light: #dbeafe;
+      --brand-soft-dark: #172554;
+      --brand-soft-border-light: #93c5fd;
+      --brand-soft-border-dark: #1d4ed8;
+
+      --ok-light: #166534;
+      --ok-dark: #4ade80;
+      --ok-soft-light: #dcfce7;
+      --ok-soft-dark: #052e16;
+      --ok-border-light: #86efac;
+      --ok-border-dark: #15803d;
+
+      --warn-light: #92400e;
+      --warn-dark: #fbbf24;
+      --warn-soft-light: #fef3c7;
+      --warn-soft-dark: #451a03;
+      --warn-border-light: #fcd34d;
+      --warn-border-dark: #b45309;
+
+      --danger-light: #991b1b;
+      --danger-dark: #f87171;
+
+      /* Inline code & pre-block surface tokens (slightly softer dark surface when page is light) */
+      --code-inline-bg-light: #e2e8f0;
+      --code-inline-bg-dark: #1e293b;
+      --code-inline-text-light: #0f172a;
+      --code-inline-text-dark: #93c5fd;
+      --pre-bg-light: #0f172a;
+      --pre-bg-dark: #050811;
+      --pre-border-light: #334155;
+      --pre-border-dark: #334155;
+
+      /* Scrollbar tokens */
+      --scrollbar-track-light: #e2e8f0;
+      --scrollbar-track-dark: #0f172a;
+      --scrollbar-thumb-light: #64748b;
+      --scrollbar-thumb-dark: #475569;
+
+      /* Default fallback assignments (Light) */
+      --bg: var(--bg-light);
+      --surface: var(--surface-light);
+      --surface-alt: var(--surface-alt-light);
+      --surface-elevated: var(--surface-elevated-light);
+      --text: var(--text-light);
+      --muted: var(--muted-light);
+      --border: var(--border-light);
+      --border-strong: var(--border-strong-light);
+      --brand: var(--brand-light);
+      --brand-contrast: var(--brand-contrast-light);
+      --brand-soft: var(--brand-soft-light);
+      --brand-soft-border: var(--brand-soft-border-light);
+      --ok: var(--ok-light);
+      --ok-soft: var(--ok-soft-light);
+      --ok-border: var(--ok-border-light);
+      --warn: var(--warn-light);
+      --warn-soft: var(--warn-soft-light);
+      --warn-border: var(--warn-border-light);
+      --danger: var(--danger-light);
+      --code-inline-bg: var(--code-inline-bg-light);
+      --code-inline-text: var(--code-inline-text-light);
+      --pre-bg: var(--pre-bg-light);
+      --pre-border: var(--pre-border-light);
+      --scrollbar-track: var(--scrollbar-track-light);
+      --scrollbar-thumb: var(--scrollbar-thumb-light);
+
+      /* MANDATORY: Fallback for browsers without light-dark() support */
+      @media (prefers-color-scheme: dark) {
+        --bg: var(--bg-dark);
+        --surface: var(--surface-dark);
+        --surface-alt: var(--surface-alt-dark);
+        --surface-elevated: var(--surface-elevated-dark);
+        --text: var(--text-dark);
+        --muted: var(--muted-dark);
+        --border: var(--border-dark);
+        --border-strong: var(--border-strong-dark);
+        --brand: var(--brand-dark);
+        --brand-contrast: var(--brand-contrast-dark);
+        --brand-soft: var(--brand-soft-dark);
+        --brand-soft-border: var(--brand-soft-border-dark);
+        --ok: var(--ok-dark);
+        --ok-soft: var(--ok-soft-dark);
+        --ok-border: var(--ok-border-dark);
+        --warn: var(--warn-dark);
+        --warn-soft: var(--warn-soft-dark);
+        --warn-border: var(--warn-border-dark);
+        --danger: var(--danger-dark);
+        --code-inline-bg: var(--code-inline-bg-dark);
+        --code-inline-text: var(--code-inline-text-dark);
+        --pre-bg: var(--pre-bg-dark);
+        --pre-border: var(--pre-border-dark);
+        --scrollbar-track: var(--scrollbar-track-dark);
+        --scrollbar-thumb: var(--scrollbar-thumb-dark);
+      }
+
+      @supports (color: light-dark(white, black)) {
+        --bg: light-dark(var(--bg-light), var(--bg-dark));
+        --surface: light-dark(var(--surface-light), var(--surface-dark));
+        --surface-alt: light-dark(var(--surface-alt-light), var(--surface-alt-dark));
+        --surface-elevated: light-dark(var(--surface-elevated-light), var(--surface-elevated-dark));
+        --text: light-dark(var(--text-light), var(--text-dark));
+        --muted: light-dark(var(--muted-light), var(--muted-dark));
+        --border: light-dark(var(--border-light), var(--border-dark));
+        --border-strong: light-dark(var(--border-strong-light), var(--border-strong-dark));
+        --brand: light-dark(var(--brand-light), var(--brand-dark));
+        --brand-contrast: light-dark(var(--brand-contrast-light), var(--brand-contrast-dark));
+        --brand-soft: light-dark(var(--brand-soft-light), var(--brand-soft-dark));
+        --brand-soft-border: light-dark(var(--brand-soft-border-light), var(--brand-soft-border-dark));
+        --ok: light-dark(var(--ok-light), var(--ok-dark));
+        --ok-soft: light-dark(var(--ok-soft-light), var(--ok-soft-dark));
+        --ok-border: light-dark(var(--ok-border-light), var(--ok-border-dark));
+        --warn: light-dark(var(--warn-light), var(--warn-dark));
+        --warn-soft: light-dark(var(--warn-soft-light), var(--warn-soft-dark));
+        --warn-border: light-dark(var(--warn-border-light), var(--warn-border-dark));
+        --danger: light-dark(var(--danger-light), var(--danger-dark));
+        --code-inline-bg: light-dark(var(--code-inline-bg-light), var(--code-inline-bg-dark));
+        --code-inline-text: light-dark(var(--code-inline-text-light), var(--code-inline-text-dark));
+        --pre-bg: light-dark(var(--pre-bg-light), var(--pre-bg-dark));
+        --pre-border: light-dark(var(--pre-border-light), var(--pre-border-dark));
+        --scrollbar-track: light-dark(var(--scrollbar-track-light), var(--scrollbar-track-dark));
+        --scrollbar-thumb: light-dark(var(--scrollbar-thumb-light), var(--scrollbar-thumb-dark));
+      }
+
+      /* High-contrast reinforcement when OS requests increased contrast */
+      @media (prefers-contrast: more) {
+        --border: var(--border-strong);
+        --muted: var(--text);
+      }
+
+      /* Forced Colors Mode (Windows High Contrast) system keyword mapping */
+      @media (forced-colors: active) {
+        --bg: Canvas;
+        --surface: Canvas;
+        --surface-alt: Canvas;
+        --text: CanvasText;
+        --muted: CanvasText;
+        --border: CanvasText;
+        --border-strong: CanvasText;
+        --brand: Highlight;
+        --brand-contrast: HighlightText;
+      }
+
+      color-scheme: light dark;
+      accent-color: var(--brand);
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+
+      &:has(> head > meta[name="color-scheme"][content="dark"]) {
+        color-scheme: dark;
+      }
+      &:has(> head > meta[name="color-scheme"][content="light"]) {
+        color-scheme: light;
+      }
+    }
+
+    @supports not (scrollbar-color: auto) {
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+      }
+    }
+
+    ::selection {
+      background: var(--brand);
+      color: var(--brand-contrast);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.62;
+    }
+
+    /* Sticky Topbar */
+    header.topbar {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 30;
+      background: var(--surface);
+      border-block-end: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+    .brand-title {
+      font-weight: 800;
+      font-size: 1.08rem;
+      letter-spacing: -0.015em;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      background: var(--surface-alt);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 0.5rem;
+      padding: 0.42rem 0.75rem;
+      font-size: 0.85rem;
+      min-inline-size: 220px;
+    }
+    .search-input::placeholder {
+      color: var(--muted);
+      opacity: 0.85;
+    }
+    .search-input:focus {
+      outline: 2px solid var(--brand);
+      outline-offset: 1px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.18rem 0.62rem;
+      font-size: 0.74rem;
+      font-weight: 700;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      border: 1px solid var(--brand-soft-border);
+    }
+    .badge.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+      border-color: var(--ok-border);
+    }
+    .badge.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-color: var(--warn-border);
+    }
+
+    .btn {
+      background: var(--surface-alt);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 0.5rem;
+      padding: 0.42rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .btn:hover {
+      border-color: var(--brand);
+      background: var(--surface-elevated);
+    }
+    .btn.primary {
+      background: var(--brand);
+      color: var(--brand-contrast);
+      border-color: var(--brand);
+    }
+
+    /* Main Grid Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      max-inline-size: 1480px;
+      margin-inline: auto;
+    }
+    @media (width < 980px) {
+      .layout { grid-template-columns: 1fr; }
+      nav.sidebar {
+        position: static !important;
+        block-size: auto !important;
+        border-inline-end: none !important;
+        border-block-end: 1px solid var(--border);
+      }
+    }
+
+    nav.sidebar {
+      position: sticky;
+      inset-block-start: 57px;
+      block-size: calc(100dvh - 57px);
+      overflow-y: auto;
+      padding: 1.1rem 1rem 2rem;
+      border-inline-end: 1px solid var(--border);
+      background: var(--surface);
+    }
+    nav.sidebar h2 {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--muted);
+      margin: 1.15rem 0 0.35rem;
+      padding-inline-start: 0.55rem;
+      border: none;
+    }
+    nav.sidebar ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    nav.sidebar a {
+      display: block;
+      padding: 0.36rem 0.6rem;
+      border-radius: 0.4rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.85rem;
+      border-inline-start: 3px solid transparent;
+    }
+    nav.sidebar a:hover,
+    nav.sidebar a.active {
+      background: var(--surface-alt);
+      color: var(--brand);
+      border-inline-start-color: var(--brand);
+      font-weight: 600;
+    }
+
+    main {
+      padding: 2rem 2.5rem 4rem;
+      max-inline-size: 100%;
+    }
+    @media (width < 640px) {
+      main { padding: 1.25rem 1rem 3rem; }
+    }
+
+    /* Hero Banner */
+    .hero-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.75rem 2rem;
+      margin-block-end: 2rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+    .hero-banner h1 {
+      font-size: 1.95rem;
+      margin-block: 0.35rem 0.6rem;
+      letter-spacing: -0.025em;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.85rem;
+      margin-block-start: 1.25rem;
+    }
+    .kpi-box {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 0.65rem;
+      padding: 0.75rem 1rem;
+    }
+    .kpi-val {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--brand);
+      line-height: 1.2;
+    }
+    .kpi-lbl {
+      font-size: 0.76rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    section.doc-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.9rem;
+      padding: 1.65rem 1.85rem;
+      margin-block-end: 2rem;
+      scroll-margin-block-start: 4.5rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+    h2 {
+      font-size: 1.38rem;
+      margin-block: 0 0.85rem;
+      padding-block-end: 0.45rem;
+      border-block-end: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    h3 { font-size: 1.08rem; margin-block: 1.4rem 0.5rem; }
+    .lead { font-size: 1.02rem; color: var(--muted); margin: 0; }
+
+    .grid-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
+      gap: 1rem;
+      margin-block: 1rem;
+    }
+    .card {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1.1rem 1.25rem;
+    }
+    .card h3 { margin-block: 0.4rem 0.4rem; }
+    .card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+    .callout {
+      border-inline-start: 4px solid var(--brand);
+      background: var(--surface-alt);
+      padding: 0.85rem 1.1rem;
+      border-radius: 0.5rem;
+      margin-block: 1rem;
+      font-size: 0.92rem;
+    }
+    .callout.warn { border-inline-start-color: var(--warn); }
+    .callout.ok { border-inline-start-color: var(--ok); }
+
+    /* Interactive Tabs */
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      border-block-end: 1px solid var(--border);
+      padding-block-end: 0.5rem;
+      margin-block: 1rem 0.75rem;
+    }
+    .tab-btn {
+      background: var(--surface-alt);
+      color: var(--muted);
+      border: 1px solid var(--border-strong);
+      border-radius: 0.45rem;
+      padding: 0.38rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      border-color: var(--brand);
+    }
+    .tab-btn[aria-selected="true"] {
+      background: var(--brand);
+      color: var(--brand-contrast);
+      border-color: var(--brand);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Code Blocks + Copy Button */
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: var(--code-inline-bg);
+      color: var(--code-inline-text);
+      border: 1px solid var(--border);
+      padding: 0.1rem 0.38rem;
+      border-radius: 0.3rem;
+      font-size: 0.85em;
+    }
+    .code-wrap {
+      position: relative;
+      margin-block: 0.75rem 1.25rem;
+    }
+    .copy-btn {
+      position: absolute;
+      inset-block-start: 0.55rem;
+      inset-inline-end: 0.65rem;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #64748b;
+      border-radius: 0.38rem;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 2;
+    }
+    .copy-btn:hover { background: #334155; color: #ffffff; border-color: #93c5fd; }
+    pre {
+      color-scheme: only dark;
+      accent-color: var(--brand);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: var(--pre-bg);
+      color: #f1f5f9;
+      padding: 1.05rem 1.2rem;
+      padding-inline-end: 4.5rem;
+      border-radius: 0.65rem;
+      overflow-x: auto;
+      border: 1px solid var(--pre-border);
+      font-size: 0.83rem;
+      line-height: 1.56;
+      margin: 0;
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* Responsive Accessible Data Tables */
+    .table-wrapper {
+      overflow: auto;
+      max-inline-size: 100%;
+      max-block-size: min(560px, 80vh);
+      container-type: inline-size;
+      border: 1px solid var(--border);
+      border-radius: 0.65rem;
+      background: var(--surface);
+      margin-block: 1rem 1.25rem;
+    }
+    table {
+      inline-size: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.86rem;
+    }
+    caption {
+      text-align: start;
+      padding: 0.75rem 1rem;
+      font-weight: 700;
+      background: var(--surface-alt);
+      border-block-end: 1px solid var(--border);
+    }
+    thead {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 1;
+      background: var(--surface-alt);
+    }
+    th, td {
+      text-align: start;
+      padding: 0.65rem 0.9rem;
+      border-block-end: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tbody th {
+      position: sticky;
+      inset-inline-start: 0;
+      background: var(--surface);
+      font-weight: 600;
+    }
+    @container (width < 640px) {
+      table, thead, tbody, tr, th, td { display: block; }
+      thead { display: none; }
+      tr {
+        margin-block-end: 1rem;
+        border-block-end: 2px solid var(--border);
+      }
+      tbody th {
+        position: sticky;
+        inset-block-start: 0;
+        z-index: 2;
+        background: var(--surface-alt);
+      }
+      td:nth-child(2)::before { content: var(--label-2, "") ": "; font-weight: 600; }
+      td:nth-child(3)::before { content: var(--label-3, "") ": "; font-weight: 600; }
+      td:nth-child(4)::before { content: var(--label-4, "") ": "; font-weight: 600; }
+      td:nth-child(5)::before { content: var(--label-5, "") ": "; font-weight: 600; }
+    }
+
+    /* Pipeline Stepper */
+    .pipeline-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 0.65rem;
+      margin-block: 1rem 1.25rem;
+    }
+    .p-step {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      padding: 0.7rem 0.85rem;
+      font-size: 0.82rem;
+    }
+    .p-step strong {
+      display: block;
+      color: var(--brand);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-block-end: 0.2rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-title">
+      <span>On-Premises DevOps Platform</span>
+      <span class="badge">Ubuntu 24.04 LTS</span>
+      <span class="badge ok">3-Layer HA Architecture</span>
+    </div>
+    <div class="topbar-actions">
+      <input type="search" id="doc-search" class="search-input" placeholder="Filter sections (e.g. Vault, Rollback, Sample App)..." aria-label="Filter guide sections">
+      <button type="button" class="btn" id="theme-toggle" aria-label="Toggle color scheme">Switch Theme</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" aria-label="Implementation Guide Navigation">
+      <h2>1. Architecture</h2>
+      <ul>
+        <li><a href="#overview">3-Layer Platform Overview</a></li>
+        <li><a href="#inventory-matrix">Host, VLAN &amp; Version Matrix</a></li>
+      </ul>
+      <h2>2. Local Lab (Multipass)</h2>
+      <ul>
+        <li><a href="#local-prereqs">Local VMs, Ansible &amp; Scripts</a></li>
+      </ul>
+      <h2>3. Production (VMware / Bare-Metal)</h2>
+      <ul>
+        <li><a href="#prod-prereqs">Layer 1, Layer 2 &amp; Layer 3 Runbook</a></li>
+      </ul>
+      <h2>4. Complete Sample App Walkthrough</h2>
+      <ul>
+        <li><a href="#sample-app">Sample App Source &amp; 1-Click Generator</a></li>
+        <li><a href="#sample-gitops">Sample App Kustomize &amp; Argo CD</a></li>
+      </ul>
+      <h2>5. Git &rarr; Jenkins &rarr; Argo CD Flow</h2>
+      <ul>
+        <li><a href="#cicd-overview">4.1–4.5 Webhook, CI &amp; Promotion</a></li>
+      </ul>
+      <h2>6. Deployment &amp; Rollback Matrix</h2>
+      <ul>
+        <li><a href="#deploy-new-app">Onboard New App &amp; Rollback by Condition</a></li>
+      </ul>
+      <h2>7. Verification &amp; Roadmap</h2>
+      <ul>
+        <li><a href="#verify-health">Health Checks &amp; Failover Drills</a></li>
+        <li><a href="#recommended-features">Enterprise Feature Roadmap</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <div class="hero-banner" id="overview">
+        <span class="badge">Production-Hardened Runbook &bull; Local Multipass &amp; 26-VM Production</span>
+        <h1>On-Premises DevOps Platform Implementation Guide</h1>
+        <p class="lead">
+          End-to-end engineering handbook for deploying the 3-Layer On-Premises DevOps Platform, featuring a complete deployable <strong>Sample Microservice (<code>sample-api</code>)</strong>, automated <strong>GitLab &rarr; Jenkins &rarr; Nexus &rarr; Argo CD</strong> delivery, condition-based rollback playbooks, and enterprise roadmap.
+        </p>
+        <div class="kpi-grid">
+          <div class="kpi-box">
+            <div class="kpi-val">3 Layers / 7 VLANs</div>
+            <div class="kpi-lbl">Strict Blast-Radius Isolation</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val">RPO = 0 / HA VIPs</div>
+            <div class="kpi-lbl">5-VM PostgreSQL 16 + 3-Node Redis</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val">Garage S3 v2.5.0</div>
+            <div class="kpi-lbl">4-Node Replication (Factor 3 + TLS)</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val">Zero Docker Socket</div>
+            <div class="kpi-lbl">Rootless Buildah + Trivy + GitOps</div>
+          </div>
+        </div>
+
+        <div class="grid-cards">
+          <div class="card">
+            <span class="badge">Layer 1 &bull; VLANs 10, 20, 50, 60, 70</span>
+            <h3>Stateful DevOps, HA DB &amp; Storage</h3>
+            <p>GitLab CE, Jenkins LTS + Buildah Agents, Sonatype Nexus, 5-VM PostgreSQL 16 HA (Patroni + 3-node etcd + HAProxy/Keepalived VIP + pgBackRest), 3-node Redis Sentinel, 4-node Garage S3 (<code>v2.5.0</code>), Prometheus/Grafana/Loki, and HashiCorp Vault (TLS + Raft).</p>
+          </div>
+          <div class="card">
+            <span class="badge">Layer 2 &bull; VLAN 30</span>
+            <h3>Dedicated Management K8s Cluster</h3>
+            <p>3-node HA Kubernetes (<code>v1.31.4</code>) control plane with HAProxy/Keepalived VIP (<code>10.20.30.10:8443</code>), Calico CNI, <strong>Argo CD (<code>v2.13.2</code>)</strong>, and <strong>Rancher (<code>v2.10.1</code> via Helm + cert-manager)</strong>.</p>
+          </div>
+          <div class="card">
+            <span class="badge">Layer 3 &bull; VLAN 40</span>
+            <h3>Application Kubernetes Cluster</h3>
+            <p>3x HA Control Planes (<code>10.20.40.11..13</code>, VIP <code>.10:8443</code>) + 3x Worker Nodes (<code>10.20.40.21..23</code>). Runs business microservices (<code>dev</code>, <code>staging</code>, <code>production</code>) reconciled remotely by Layer 2 Argo CD.</p>
+          </div>
+        </div>
+      </div>
+
+      <section class="doc-section" id="inventory-matrix">
+        <h2>
+          <span>1. Host, VLAN &amp; Pinned Version Matrix</span>
+          <span class="badge">16 Verified Install Scripts</span>
+        </h2>
+        <div tabindex="0" role="region" aria-labelledby="matrix-caption" class="table-wrapper">
+          <table style="--label-2: 'Layer / VLAN'; --label-3: 'Local Multipass VM'; --label-4: 'Production Hosts &amp; VIP'; --label-5: 'Version &amp; Installer';">
+            <caption id="matrix-caption">Platform Topology &amp; Pinned Software Versions (Ubuntu 24.04 LTS)</caption>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Layer / VLAN</th>
+                <th>Local Multipass VM</th>
+                <th>Production Hosts &amp; VIP</th>
+                <th>Version &amp; Installer</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>OS Baseline &amp; Node Exporter</th>
+                <td>All Layers</td>
+                <td>All VMs</td>
+                <td>All 26 VMs</td>
+                <td>Node Exporter <code>1.8.2</code> &mdash; <code>manual-install/common/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>GitLab CE + glab CLI</th>
+                <td>Layer 1 / VLAN 20</td>
+                <td><code>devops-gitlab</code> (<code>.10</code>)</td>
+                <td><code>prod-gitlab-01</code> (<code>10.20.20.10</code>)</td>
+                <td>GitLab <code>17.7.1-ce.0</code> &mdash; <code>manual-install/gitlab/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>Jenkins LTS + Build Agents</th>
+                <td>Layer 1 / VLAN 20</td>
+                <td><code>devops-jenkins</code> (<code>.11</code>)</td>
+                <td><code>prod-jenkins-01</code> (<code>.11</code>), <code>agent-01..02</code> (<code>.12..13</code>)</td>
+                <td>Jenkins <code>2.479.3</code>, Buildah, Trivy <code>0.58.1</code> &mdash; <code>jenkins/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>Sonatype Nexus 3</th>
+                <td>Layer 1 / VLAN 20</td>
+                <td><code>devops-nexus</code> (<code>.12</code>)</td>
+                <td><code>prod-nexus-01</code> (<code>10.20.20.14</code>)</td>
+                <td>Nexus <code>3.75.1-01</code> (<code>:8081</code>, Docker <code>:5000/:5001</code>) &mdash; <code>nexus/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>PostgreSQL 16 HA Cluster</th>
+                <td>Layer 1 / VLAN 50</td>
+                <td><code>pg-db1..3</code> (<code>.26..28</code>)</td>
+                <td><code>pg-lb1..2</code> (<code>10.20.50.8..9</code>, VIP <code>.10</code>), <code>pg-db1..3</code> (<code>.11..13</code>)</td>
+                <td>PG <code>16</code> + Patroni + 3-node etcd + pgBackRest &mdash; <code>postgresql-ha/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>Redis + Sentinel HA</th>
+                <td>Layer 1 / VLAN 50</td>
+                <td><code>pg-db1</code> (standalone)</td>
+                <td><code>prod-redis-01..03</code> (<code>10.20.50.21..23</code>)</td>
+                <td>Redis <code>7.4</code> + Sentinel quorum 2 &mdash; <code>manual-install/redis/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>Garage S3 Object Storage</th>
+                <td>Layer 1 / VLAN 60</td>
+                <td><code>devops-nexus</code> (single node)</td>
+                <td><code>prod-minio-01..04</code> (<code>10.20.60.11..14</code>, VIP <code>.10:9443</code>)</td>
+                <td>Garage <code>v2.5.0</code> + Nginx TLS <code>:9443</code> &mdash; <code>manual-install/minio/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>HashiCorp Vault</th>
+                <td>Layer 1 / VLAN 10</td>
+                <td><code>devops-monitor</code></td>
+                <td><code>prod-secops-01</code> (<code>10.20.10.16:8200</code>)</td>
+                <td>Vault <code>1.18.3</code> (TLS + Raft storage) &mdash; <code>manual-install/vault/install.sh</code></td>
+              </tr>
+              <tr>
+                <th>Prometheus + Grafana + Loki</th>
+                <td>Layer 1 / VLAN 70</td>
+                <td><code>devops-monitor</code> (<code>.29</code>)</td>
+                <td><code>prod-monitor-01</code> (<code>10.20.70.10</code>)</td>
+                <td>Prom <code>2.53.3</code>, Grafana <code>11.4.0</code>, Loki <code>3.3.2</code> &mdash; <code>monitoring/</code> &amp; <code>logging/</code></td>
+              </tr>
+              <tr>
+                <th>Layer 2 Mgmt K8s + Argo CD + Rancher</th>
+                <td>Layer 2 / VLAN 30</td>
+                <td><code>k8s-mgmt-cp01</code> (<code>.27</code>)</td>
+                <td><code>prod-k8s-mgmt-cp01..03</code> (<code>10.20.30.11..13</code>, VIP <code>.10:8443</code>)</td>
+                <td>K8s <code>1.31.4</code>, Calico <code>v3.29.1</code>, Argo CD <code>v2.13.2</code>, Rancher <code>v2.10.1</code></td>
+              </tr>
+              <tr>
+                <th>Layer 3 App K8s Cluster</th>
+                <td>Layer 3 / VLAN 40</td>
+                <td><code>k8s-cp01</code> (<code>.28</code>) + <code>k8s-worker01</code></td>
+                <td><code>prod-k8s-cp01..03</code> (<code>10.20.40.11..13</code>, VIP <code>.10:8443</code>) + <code>worker01..03</code> (<code>.21..23</code>)</td>
+                <td>K8s <code>1.31.4</code> + Calico <code>v3.29.1</code> &mdash; <code>kubernetes-cp/</code> &amp; <code>kubernetes-worker/</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="doc-section" id="local-prereqs">
+        <h2>
+          <span>2. Local Implementation (Multipass on macOS / Linux)</span>
+          <span class="badge ok">Auto-Discovers Multipass DHCP IPs</span>
+        </h2>
+        <h3>2.1 Create Local Multipass VMs</h3>
+        <p>Choose a profile based on your workstation RAM (<code>compact</code>: 7 VMs / ~16 GB RAM, <code>minimal</code>: 10 VMs / ~24 GB RAM, or <code>full</code>: 15 VMs / ~42 GB RAM):</p>
+        <pre><code># 1. Provision Ubuntu 24.04 VMs with cloud-init SSH keys and generate local inventory
+./multipass/create-vms.sh minimal
+./multipass/status.sh</code></pre>
+
+        <h3>2.2 Option A (Ansible) vs. Option B (Manual Install Scripts)</h3>
+        <div class="tab-bar" role="tablist" aria-label="Local Installation Methods">
+          <button type="button" class="tab-btn" role="tab" aria-selected="true" data-tab-target="local-tab-manual">Option A: Manual Scripts (devops-cli.sh)</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="local-tab-ansible">Option B: Ansible Playbooks</button>
+        </div>
+        <div id="local-tab-manual" class="tab-panel active">
+          <pre><code># Inspect discovered Multipass IPs and install order
+./manual-install/devops-cli.sh --env local env
+./manual-install/devops-cli.sh --env local list
+
+# 1. Baseline all local VMs
+for vm in devops-gitlab devops-jenkins devops-nexus pg-db1 pg-db2 pg-db3 k8s-mgmt-cp01 k8s-cp01 k8s-worker01 devops-monitor; do
+  ./manual-install/devops-cli.sh --env local multipass-install common "$vm"
+done
+
+# 2. Layer 1, Layer 2, and Layer 3 installation
+./manual-install/devops-cli.sh --env local multipass-install gitlab            devops-gitlab
+./manual-install/devops-cli.sh --env local multipass-install nexus             devops-nexus
+./manual-install/devops-cli.sh --env local multipass-install minio             devops-nexus
+./manual-install/devops-cli.sh --env local multipass-install jenkins           devops-jenkins
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db1
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db2
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db3
+./manual-install/devops-cli.sh --env local multipass-install redis             pg-db1
+./manual-install/devops-cli.sh --env local multipass-install vault             devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install monitoring        devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install logging           devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local multipass-install rancher           k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker01
+
+# 3. Verify all local endpoints
+./manual-install/devops-cli.sh --env local status</code></pre>
+        </div>
+        <div id="local-tab-ansible" class="tab-panel">
+          <pre><code># Install required Ansible collections
+ansible-galaxy collection install -r requirements.yml
+
+# Create your local Ansible Vault file from the example
+cp inventories/local/group_vars/vault.yml.example inventories/local/group_vars/vault.yml
+
+# Run the complete 3-layer playbook against Multipass
+ansible-playbook -i inventories/local/hosts.yml playbooks/site.yml
+
+# Validate all services and network connectivity
+./scripts/validate-network.sh -i inventories/local/hosts.yml
+./scripts/validate-services.sh -i inventories/local/hosts.yml</code></pre>
+        </div>
+      </section>
+
+      <section class="doc-section" id="prod-prereqs">
+        <h2>
+          <span>3. Production Implementation (VMware vSphere / Bare-Metal)</span>
+          <span class="badge warn">Enforces Production Safety Guards</span>
+        </h2>
+        <div class="callout warn">
+          <strong>Production Safety Guards Enforced by All Scripts:</strong>
+          When <code>PLATFORM_ENV=production</code> is set, the installers refuse to run if any password starts with <code>ChangeMe_</code>, if SSH <code>authorized_keys</code> is missing (preventing lockout), if PostgreSQL backups are not backed by shared S3 (<code>PGBR_S3=true</code>), or if Garage S3 is missing <code>GARAGE_SHA256</code>.
+        </div>
+
+        <h3>3.1 Prepare Credentials &amp; Baseline All 26 VMs</h3>
+        <pre><code>export PLATFORM_ENV="production"
+export DOMAIN="internal.example.com"
+export GITLAB_ROOT_PASS="<StrongGitLabRootPass!>"
+export RANCHER_BOOTSTRAP_PASS="<StrongRancherBootstrapPass!>"
+export GRAFANA_PASS="<StrongGrafanaPass!>"
+export REDIS_PASS="<StrongRedisPass_16PlusChars!>"
+export PG_ADMIN_PASS="<StrongPostgresAdminPass!>"
+export PG_REPL_PASS="<StrongPostgresReplPass!>"
+export PG_VRRP_PASS="PgVrrp99"
+export GARAGE_VRRP_PASS="S3Vrrp99"
+export K8S_VRRP_PASS="K8sVrrp9"
+
+for ip in 10.20.20.{10..14} 10.20.50.{8,9,11,12,13,21,22,23} 10.20.60.{11..14} \
+          10.20.70.10 10.20.10.16 10.20.30.{11..13} 10.20.40.{11..13,21..23}; do
+  ./manual-install/devops-cli.sh --env production remote-install common "ansible@${ip}"
+done</code></pre>
+
+        <h3>3.2 Deploy Layer 1 (Vault, 4-Node Garage S3, 5-VM PostgreSQL HA, 3-Node Redis, DevOps)</h3>
+        <pre><code># 1. HashiCorp Vault (TLS + Raft storage) on prod-secops-01 (10.20.10.16)
+./manual-install/devops-cli.sh --env production remote-install vault ansible@10.20.10.16
+
+# 2. 4-Node Distributed Garage S3 Cluster (VLAN 60: 10.20.60.11..14, VIP 10.20.60.10:9443)
+export GARAGE_RPC_SECRET="$(openssl rand -hex 32)"
+export GARAGE_SHA256="&lt;sha256-of-garage-v2.5.0-linux-amd64&gt;"
+for ip in 10.20.60.{11..14}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET} GARAGE_SHA256=${GARAGE_SHA256} GARAGE_VRRP_PASS=${GARAGE_VRRP_PASS} /opt/manual-install/minio/install.sh"
+done
+ssh ansible@10.20.60.11 "sudo PLATFORM_ENV=production GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET} GARAGE_SHA256=${GARAGE_SHA256} GARAGE_VRRP_PASS=${GARAGE_VRRP_PASS} GARAGE_BOOTSTRAP=true GARAGE_PEERS='&lt;id2@10.20.60.12:3901&gt;,&lt;id3@10.20.60.13:3901&gt;,&lt;id4@10.20.60.14:3901&gt;' /opt/manual-install/minio/install.sh"
+
+# 3. 5-VM PostgreSQL 16 HA Cluster (3x DB nodes simultaneously for etcd quorum, then 2x LBs)
+for ip in 10.20.50.{11..13}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production PGBR_S3=true S3_PGBACKREST_ACCESS_KEY='...' S3_PGBACKREST_SECRET_KEY='...' PG_ADMIN_PASS='${PG_ADMIN_PASS}' PG_REPL_PASS='${PG_REPL_PASS}' PG_VRRP_PASS='${PG_VRRP_PASS}' /opt/manual-install/postgresql-ha/install.sh" &amp;
+done
+wait
+for ip in 10.20.50.{8,9}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production PG_ADMIN_PASS='${PG_ADMIN_PASS}' PG_REPL_PASS='${PG_REPL_PASS}' PG_VRRP_PASS='${PG_VRRP_PASS}' /opt/manual-install/postgresql-ha/install.sh"
+done
+
+# 4. 3-Node Redis Sentinel HA + GitLab + Nexus + Jenkins + Monitoring + Logging
+for ip in 10.20.50.{21..23}; do ./manual-install/devops-cli.sh --env production remote-install redis "ansible@${ip}"; done
+./manual-install/devops-cli.sh --env production remote-install gitlab        ansible@10.20.20.10
+./manual-install/devops-cli.sh --env production remote-install nexus         ansible@10.20.20.14
+./manual-install/devops-cli.sh --env production remote-install jenkins       ansible@10.20.20.11
+./manual-install/devops-cli.sh --env production remote-install jenkins-agent ansible@10.20.20.12
+./manual-install/devops-cli.sh --env production remote-install jenkins-agent ansible@10.20.20.13
+./manual-install/devops-cli.sh --env production remote-install monitoring    ansible@10.20.70.10
+./manual-install/devops-cli.sh --env production remote-install logging       ansible@10.20.70.10</code></pre>
+
+        <h3>3.3 Deploy Layer 2 (Mgmt K8s + Argo CD + Rancher) &amp; Layer 3 (App K8s Cluster)</h3>
+        <pre><code># Layer 2 Management Cluster (VIP 10.20.30.10:8443)
+./manual-install/devops-cli.sh --env production remote-install kubernetes-mgmt ansible@10.20.30.11
+for ip in 10.20.30.{12,13}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production K8S_VRRP_PASS='${K8S_VRRP_PASS}' KUBEADM_JOIN_CMD='kubeadm join 10.20.30.10:8443 --token ... --control-plane --certificate-key ... --apiserver-advertise-address ${ip}' /opt/manual-install/kubernetes-mgmt/install.sh"
+done
+./manual-install/devops-cli.sh --env production remote-install rancher ansible@10.20.30.11
+
+# Layer 3 Application Cluster (VIP 10.20.40.10:8443 + 3 Workers)
+./manual-install/devops-cli.sh --env production remote-install kubernetes-cp ansible@10.20.40.11
+for ip in 10.20.40.{12,13}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production K8S_VRRP_PASS='${K8S_VRRP_PASS}' KUBEADM_JOIN_CMD='kubeadm join 10.20.40.10:8443 --token ... --control-plane --certificate-key ... --apiserver-advertise-address ${ip}' /opt/manual-install/kubernetes-cp/install.sh"
+done
+for ip in 10.20.40.{21..23}; do
+  ssh "ansible@${ip}" "sudo PLATFORM_ENV=production KUBEADM_JOIN_CMD='kubeadm join 10.20.40.10:8443 --token ... --discovery-token-ca-cert-hash sha256:...' /opt/manual-install/kubernetes-worker/install.sh"
+done</code></pre>
+      </section>
+
+      <section class="doc-section" id="sample-app">
+        <h2>
+          <span>4. Ready-to-Deploy Sample Application (<code>sample-api</code>)</span>
+          <span class="badge ok">Included in Repo: <code>kubernetes/applications/sample-api/</code></span>
+        </h2>
+        <p>
+          To test the entire <strong>GitLab &rarr; Jenkins &rarr; Trivy &rarr; Buildah &rarr; Nexus &rarr; Argo CD &rarr; Kubernetes</strong> pipeline immediately, a complete, zero-dependency Python 3.12 microservice is included in this repository (and embedded below). It exposes <code>/healthz</code>, <code>/readyz</code>, <code>/metrics</code> (Prometheus format), and <code>/api/v1/info</code> on port <code>8080</code> as non-root UID <code>10001</code>.
+        </p>
+
+        <div class="tab-bar" role="tablist" aria-label="Sample Application Files">
+          <button type="button" class="tab-btn" role="tab" aria-selected="true" data-tab-target="app-tab-bootstrap">1-Command Repo Bootstrap</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="app-tab-py">app.py (Microservice)</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="app-tab-test">test_app.py (Unit Tests)</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="app-tab-docker">Dockerfile (Non-Root 10001)</button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="app-tab-k8s">Kustomize Base &amp; Overlays</button>
+        </div>
+
+        <div id="app-tab-bootstrap" class="tab-panel active">
+          <div class="callout ok">
+            <strong>Copy &amp; Run:</strong> This single script packages <code>app.py</code>, <code>test_app.py</code>, <code>Dockerfile</code>, and <code>Jenkinsfile</code> into <code>/tmp/sample-api-repo</code>, runs the unit tests locally, and pushes to your GitLab <code>devops/api</code> repository to trigger Jenkins and Argo CD.
+          </div>
+          <pre><code># Generate and push the complete sample-api project to GitLab:
+export GITLAB_HOST="${GITLAB_HOST:-gitlab.devops.local}"
+mkdir -p /tmp/sample-api-repo
+cp kubernetes/applications/sample-api/{app.py,test_app.py,Dockerfile} /tmp/sample-api-repo/
+cp jenkins/Jenkinsfile.example /tmp/sample-api-repo/Jenkinsfile
+
+# Verify unit tests locally before pushing
+python3 -B /tmp/sample-api-repo/test_app.py -v
+
+# Initialize Git and push to GitLab 'devops/api'
+cd /tmp/sample-api-repo
+git init -b main
+git add app.py test_app.py Dockerfile Jenkinsfile
+git commit -m "feat(api): initial production-hardened sample-api v1.0.0"
+git remote add origin "http://${GITLAB_HOST}/devops/api.git"
+git push -u origin main</code></pre>
+        </div>
+
+        <div id="app-tab-py" class="tab-panel">
+          <pre><code>#!/usr/bin/env python3
+"""
+kubernetes/applications/sample-api/app.py
+Lightweight zero-dependency HTTP microservice for testing the CI/CD + GitOps pipeline.
+Exposes /healthz, /readyz, /metrics, and /api/v1/info on port 8080.
+"""
+
+import json
+import os
+import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+APP_VERSION = os.environ.get("APP_VERSION", "1.0.0")
+APP_ENV = os.environ.get("APP_ENV", "dev")
+
+
+class ApiHandler(BaseHTTPRequestHandler):
+    def _send_json(self, status_code: int, payload: dict) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:
+        if self.path in ("/healthz", "/readyz"):
+            self._send_json(200, {"status": "ok", "version": APP_VERSION, "env": APP_ENV})
+        elif self.path == "/metrics":
+            metrics = (
+                "# HELP api_up Whether the sample API service is healthy\n"
+                "# TYPE api_up gauge\n"
+                f'api_up{{env="{APP_ENV}",version="{APP_VERSION}"}} 1\n'
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(metrics)))
+            self.end_headers()
+            self.wfile.write(metrics)
+        else:
+            self._send_json(
+                200,
+                {
+                    "service": "api",
+                    "version": APP_VERSION,
+                    "environment": APP_ENV,
+                    "hostname": socket.gethostname(),
+                },
+            )
+
+
+if __name__ == "__main__":
+    server = HTTPServer(("0.0.0.0", 8080), ApiHandler)
+    print(f"Starting sample-api v{APP_VERSION} ({APP_ENV}) on :8080...")
+    server.serve_forever()</code></pre>
+        </div>
+
+        <div id="app-tab-test" class="tab-panel">
+          <pre><code>#!/usr/bin/env python3
+"""
+kubernetes/applications/sample-api/test_app.py
+Unit tests for app.py — verifies /healthz, /readyz, /metrics, and /api/v1/info.
+"""
+
+import json
+import threading
+import unittest
+import urllib.request
+from http.server import HTTPServer
+import app as sample_app
+
+
+class SampleApiTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.server = HTTPServer(("127.0.0.1", 0), sample_app.ApiHandler)
+        cls.port = cls.server.server_port
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def _get(self, path: str):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}", timeout=3) as resp:
+            return resp.status, resp.headers.get("Content-Type", ""), resp.read().decode("utf-8")
+
+    def test_healthz_and_readyz(self) -> None:
+        for endpoint in ("/healthz", "/readyz"):
+            status, content_type, body = self._get(endpoint)
+            self.assertEqual(status, 200)
+            self.assertIn("application/json", content_type)
+            self.assertEqual(json.loads(body)["status"], "ok")
+
+    def test_prometheus_metrics(self) -> None:
+        status, content_type, body = self._get("/metrics")
+        self.assertEqual(status, 200)
+        self.assertIn("api_up{", body)
+
+    def test_service_info_payload(self) -> None:
+        status, _, body = self._get("/api/v1/info")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["service"], "api")
+
+
+if __name__ == "__main__":
+    unittest.main()</code></pre>
+        </div>
+
+        <div id="app-tab-docker" class="tab-panel">
+          <pre><code># kubernetes/applications/sample-api/Dockerfile
+# Hardened Non-Root Container Image (UID/GID 10001, compatible with readOnlyRootFilesystem: true)
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_VERSION=1.0.0
+
+RUN groupadd -g 10001 appgroup &amp;&amp; \
+    useradd -u 10001 -g appgroup -s /sbin/nologin -M appuser
+
+WORKDIR /app
+COPY app.py /app/app.py
+RUN chown -R 10001:10001 /app
+
+USER 10001:10001
+EXPOSE 8080
+
+CMD ["python3", "/app/app.py"]</code></pre>
+        </div>
+
+        <div id="app-tab-k8s" class="tab-panel" id="sample-gitops">
+          <pre><code># gitops/applications/api/overlays/production/kustomization.yaml
+# Updated automatically by Jenkins Stage 9 (updateGitOpsRepo.groovy) on every build!
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+namePrefix: prod-
+
+resources:
+  - ../../base
+
+images:
+  - name: registry.devops.local:5000/api
+    newName: registry.internal.example.com:5000/api
+    newTag: "1.0.0-a1b2c3d4"
+
+patches:
+  - path: patch-replicas.yaml</code></pre>
+        </div>
+      </section>
+
+      <section class="doc-section" id="cicd-overview">
+        <h2>
+          <span>5. Git Push &rarr; Jenkins CI &rarr; Nexus &rarr; Argo CD GitOps Workflow</span>
+          <span class="badge">Zero Cluster-Admin in Jenkins</span>
+        </h2>
+        <p>
+          <strong>Architectural Security Guardrail:</strong> Jenkins <em>never</em> holds Kubernetes cluster-admin credentials and never runs <code>kubectl apply</code>. Every deployment happens by Jenkins committing an immutable image tag to the GitLab <code>devops/gitops</code> repository, which Argo CD on Layer 2 observes and reconciles onto Layer 3.
+        </p>
+
+        <div class="pipeline-steps" aria-label="9-Stage CI/CD and GitOps Flow">
+          <div class="p-step"><strong>Stage 1</strong>Git Push Webhook &rarr; Compute Immutable Tag <code>1.0.0-&lt;sha&gt;</code></div>
+          <div class="p-step"><strong>Stage 2–3</strong>Install Deps &amp; Run Unit Tests (<code>JUnit XML</code>)</div>
+          <div class="p-step"><strong>Stage 4–5</strong>SonarQube Quality Gate + Trivy FS Scan</div>
+          <div class="p-step"><strong>Stage 6–7</strong>Rootless Buildah Build + Trivy Image Scan</div>
+          <div class="p-step"><strong>Stage 8</strong>Push Immutable Tags to Nexus <code>:5000</code></div>
+          <div class="p-step"><strong>Stage 9</strong>Commit <code>newTag</code> to <code>devops/gitops</code> &rarr; Argo CD Sync</div>
+        </div>
+
+        <h3>5.1 Create GitLab Repositories &amp; Access Token</h3>
+        <pre><code># Push the Jenkins Shared Library and GitOps repositories to GitLab:
+cd /Users/ratanakieng/labs/onprem-devops-platform
+
+# 1. Push Jenkins Shared Library (contains vars/updateGitOpsRepo.groovy)
+cd jenkins/shared-library
+git init -b main &amp;&amp; git add . &amp;&amp; git commit -m "feat: initial Jenkins shared library"
+git remote add origin http://gitlab.devops.local/devops/devops-shared-library.git
+git push -u origin main
+
+# 2. Push GitOps Repository (Kustomize bases, overlays, and Argo CD Application specs)
+cd ../../gitops
+git init -b main &amp;&amp; git add . &amp;&amp; git commit -m "feat: initial Kustomize bases, overlays, and Argo CD apps"
+git remote add origin http://gitlab.devops.local/devops/gitops.git
+git push -u origin main</code></pre>
+
+        <h3>5.2 Configure Jenkins Credentials, Shared Library &amp; GitLab Webhook</h3>
+        <ol>
+          <li>In Jenkins (<code>http://jenkins.devops.local:8080</code>) &rarr; <strong>Manage Jenkins &rarr; Credentials &rarr; Global</strong>, add:
+            <ul>
+              <li><code>nexus-docker-credentials</code> (Username/Password for Nexus <code>:5000</code>)</li>
+              <li><code>gitlab-gitops-token</code> (Username <code>oauth2</code> + GitLab Token with <code>api</code>, <code>write_repository</code>)</li>
+              <li><code>sonarqube-token</code> (Secret text)</li>
+            </ul>
+          </li>
+          <li>In <strong>Manage Jenkins &rarr; System &rarr; Global Trusted Pipeline Libraries</strong>, register <code>devops-shared-library</code> (<code>main</code> branch) from <code>http://gitlab.devops.local/devops/devops-shared-library.git</code>.</li>
+          <li>Create Multibranch Pipeline job <code>api-ci</code> for <code>http://gitlab.devops.local/devops/api.git</code>.</li>
+          <li>In GitLab <strong>Admin &rarr; Settings &rarr; Network &rarr; Outbound requests</strong>, enable local network webhooks, then add webhook <code>http://jenkins.devops.local:8080/project/api-ci</code> (Push + Merge Request events) in <code>devops/api</code>.</li>
+        </ol>
+
+        <h3>5.3 Register Layer 3 Cluster &amp; GitOps Repo in Layer 2 Argo CD</h3>
+        <pre><code># Run on Layer 2 Management Cluster node (k8s-mgmt-cp01 / 10.20.30.11):
+export KUBECONFIG=/etc/kubernetes/admin.conf
+ARGOCD_PASS="$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
+argocd login 127.0.0.1:30443 --username admin --password "${ARGOCD_PASS}" --insecure
+
+argocd repo add http://gitlab.devops.local/devops/gitops.git \
+  --username oauth2 --password "&lt;GitLab_Access_Token&gt;" --insecure-skip-server-verification
+
+kubectl apply -f /opt/kubernetes/argocd/projects.yaml
+kubectl apply -f /opt/gitops/clusters/local/applications.yaml       # or clusters/production/applications.yaml</code></pre>
+
+        <h3>5.4 Trigger Deployment &amp; Verify Live Sample App Pods</h3>
+        <pre><code># 1. Make a visible change in sample-api and push to 'staging' (auto-synced by Argo CD)
+cd /tmp/sample-api-repo
+git checkout -b staging
+sed -i.bak 's/"version": "1.0.0"/"version": "1.1.0"/' Dockerfile &amp;&amp; rm -f Dockerfile.bak
+git commit -am "feat(api): bump sample-api to v1.1.0"
+git push -u origin staging
+
+# 2. Watch Argo CD roll out the new image on Layer 3 and test the live HTTP endpoints
+kubectl -n staging get pods -l app.kubernetes.io/name=api -w
+kubectl -n staging port-forward svc/staging-api 8080:80 &amp;
+curl -s http://127.0.0.1:8080/healthz | jq .
+curl -s http://127.0.0.1:8080/api/v1/info | jq .
+curl -s http://127.0.0.1:8080/metrics</code></pre>
+
+        <h3 id="step-prod-sync">5.5 Promote to Production (Manual Approval Gate)</h3>
+        <pre><code># 1. Merge 'staging' into 'main' and push -> Jenkins updates gitops/applications/api/overlays/production
+git checkout main &amp;&amp; git merge staging &amp;&amp; git push origin main
+
+# 2. Release Manager reviews the diff and approves the production sync in Argo CD
+argocd app diff api-production
+argocd app sync api-production
+argocd app wait api-production --health --timeout 180</code></pre>
+      </section>
+
+      <section class="doc-section" id="deploy-new-app">
+        <h2>
+          <span>6. Onboarding New Apps &amp; Condition-Based Rollback Matrix</span>
+          <span class="badge warn">Declarative Git-First Recovery</span>
+        </h2>
+
+        <h3>6.1 5-Step Checklist to Onboard Another Microservice (e.g. <code>payment-service</code>)</h3>
+        <pre><code># 1. Create registry pull secret &amp; PostgreSQL HA credentials in dev, staging, production on Layer 3:
+for ns in dev staging production; do
+  kubectl -n "$ns" create secret docker-registry nexus-registry-secret \
+    --docker-server=registry.internal.example.com:5000 --docker-username=ci-pull --docker-password='&lt;Pass&gt;' \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+
+# 2. Clone Kustomize base &amp; overlays from 'api' inside devops/gitops:
+cd gitops/applications &amp;&amp; cp -R api payment-service
+find payment-service -type f -name '*.yaml' -exec sed -i '' 's/api/payment-service/g' {} +
+git add payment-service &amp;&amp; git commit -m "feat(gitops): onboard payment-service" &amp;&amp; git push</code></pre>
+
+        <h3 id="rollback-conditions">6.2 Condition-Based Rollback Decision Matrix</h3>
+        <div tabindex="0" role="region" aria-labelledby="rollback-caption" class="table-wrapper">
+          <table style="--label-2: 'Symptom / Trigger'; --label-3: 'Automatic Protection'; --label-4: 'Operator Rollback Command'; --label-5: 'RTO';">
+            <caption id="rollback-caption">Rollback Procedures by Failure Condition</caption>
+            <thead>
+              <tr>
+                <th>Condition / Scenario</th>
+                <th>Symptom / Trigger</th>
+                <th>Automatic Protection</th>
+                <th>Operator Rollback Action</th>
+                <th>Target RTO</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Condition A: Pre-Deploy CI Gate Failure</th>
+                <td>Unit test fails, SonarQube Quality Gate fails, or Trivy finds a <code>CRITICAL</code> CVE in the image</td>
+                <td>Jenkins aborts at Stages 3&ndash;7 before pushing to Nexus or touching <code>devops/gitops</code></td>
+                <td>None needed &mdash; running pods in Kubernetes are untouched. Fix code/CVE and push a new commit.</td>
+                <td>0 s (No impact)</td>
+              </tr>
+              <tr>
+                <th>Condition B: New Pod Crashes on Startup (<code>CrashLoopBackOff</code> / <code>ImagePullBackOff</code>)</th>
+                <td>Bad env var, missing config, or startup exception; <code>startupProbe</code> / <code>readinessProbe</code> fails</td>
+                <td><code>RollingUpdate</code> uses <code>maxUnavailable: 0</code>: old healthy pods continue serving 100% of traffic while the new replica is stuck</td>
+                <td>Revert the last GitOps overlay commit and re-sync:<br><code>./scripts/gitops-rollback.sh --app api --env production --revert-last</code></td>
+                <td>&lt; 30 s (Zero downtime)</td>
+              </tr>
+              <tr>
+                <th>Condition C: Post-Deploy 5xx Spike / Latency Regression</th>
+                <td>Pods pass <code>/readyz</code>, but Prometheus alerts on HTTP 5xx &gt; 1% or p95 latency regression</td>
+                <td>Prometheus fires alert; Grafana Loki shows application stack traces</td>
+                <td>Pin <code>kustomization.yaml</code> back to the last known-good immutable tag:<br><code>./scripts/gitops-rollback.sh --app api --env production --to-tag 1.0.0-a1b2c3d4</code></td>
+                <td>&lt; 60 s</td>
+              </tr>
+              <tr>
+                <th>Condition D: Bad ConfigMap, Secret, or Resource Limit Change</th>
+                <td>Application image is fine, but a bad Kustomize patch or ConfigMap broke routing or caused <code>OOMKilled</code></td>
+                <td>Argo CD tracks full Git commit history across the entire overlay directory</td>
+                <td>Revert the offending Git commit in <code>devops/gitops</code> (<code>git revert &lt;commit-sha&gt; &amp;&amp; git push</code>), then <code>argocd app sync api-production</code>.</td>
+                <td>&lt; 60 s</td>
+              </tr>
+              <tr>
+                <th>Condition E: Bad Database Schema Migration + App Release</th>
+                <td>New release ran a faulty SQL migration or caused lock contention on PostgreSQL HA</td>
+                <td>PostgreSQL HA runs continuous WAL archiving + <code>pgBackRest</code> full/diff backups on Garage S3</td>
+                <td>1) Roll back app to previous tag via <code>gitops-rollback.sh</code>.<br>2) Run backward-compatible SQL down-migration (or <code>pgbackrest --type=time restore</code> for catastrophic data corruption).</td>
+                <td>1&ndash;15 min</td>
+              </tr>
+              <tr>
+                <th>Condition F: Severe P1 Outage While GitLab is Unreachable</th>
+                <td>Immediate production outage AND GitLab/CI plane is undergoing maintenance</td>
+                <td>Kubernetes <code>Deployment</code> keeps <code>revisionHistoryLimit: 10</code> ReplicaSets on Layer 3</td>
+                <td>1) Disable Argo CD auto-sync temporarily.<br>2) Run <code>argocd app rollback api-production &lt;id&gt;</code> or <code>kubectl -n production rollout undo deploy/prod-api</code>.<br>3) Backport the revert to <code>devops/gitops</code> as soon as GitLab is back.</td>
+                <td>&lt; 15 s</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>6.3 Rollback Execution Commands</h3>
+        <pre><code># Option 1: Revert the most recent deployment commit in GitOps
+./scripts/gitops-rollback.sh --app api --env production --revert-last --dry-run
+./scripts/gitops-rollback.sh --app api --env production --revert-last
+git -C gitops push origin main &amp;&amp; argocd app sync api-production
+
+# Option 2: Pin to a specific known-good immutable tag
+./scripts/gitops-rollback.sh --app api --env production --to-tag 1.0.0-a1b2c3d4
+git -C gitops commit -am "revert(api/production): rollback to 1.0.0-a1b2c3d4" &amp;&amp; git -C gitops push origin main
+argocd app sync api-production</code></pre>
+      </section>
+
+      <section class="doc-section" id="verify-health">
+        <h2>
+          <span>7. Platform Verification &amp; Enterprise Feature Roadmap</span>
+          <span class="badge">Day-2 Operations</span>
+        </h2>
+        <pre><code># Verify all Layer 1, Layer 2, and Layer 3 endpoints + HA clusters
+./manual-install/devops-cli.sh --env production status
+ssh ansible@10.20.50.11 "sudo patronictl -c /etc/patroni/config.yml list"
+ssh ansible@10.20.50.21 "redis-cli -p 26379 -a '$REDIS_PASS' sentinel get-master-addr-by-name mymaster"
+ssh ansible@10.20.60.11 "sudo garage status &amp;&amp; sudo garage bucket list"</code></pre>
+
+        <h3 id="recommended-features">Recommended Enterprise Features We Should Have</h3>
+        <div tabindex="0" role="region" aria-labelledby="features-caption" class="table-wrapper">
+          <table style="--label-2: 'Category'; --label-3: 'Why We Need It'; --label-4: 'Recommended Tool / Stack'; --label-5: 'Priority';">
+            <caption id="features-caption">Recommended Enterprise Platform Features &amp; Roadmap</caption>
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Category</th>
+                <th>Why We Need It (Problem Solved)</th>
+                <th>Recommended Tool / Implementation</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>1. Automated Vault-to-Kubernetes Secret Sync</th>
+                <td>Security &amp; Secrets</td>
+                <td>Sync secrets from Layer 1 HashiCorp Vault directly into <code>dev</code>, <code>staging</code>, and <code>production</code> namespaces with automatic rotation.</td>
+                <td><strong>External Secrets Operator (ESO)</strong> on Layer 3 authenticating to Layer 1 Vault (<code>https://10.20.10.16:8200</code>) via Kubernetes Auth.</td>
+                <td><span class="badge warn">P0 (High)</span></td>
+              </tr>
+              <tr>
+                <th>2. Progressive Delivery (Canary + Auto-Rollback)</th>
+                <td>Deployment Safety</td>
+                <td>Shift traffic incrementally (5% &rarr; 25% &rarr; 100%) and auto-abort if Prometheus error rates or latency spike.</td>
+                <td><strong>Argo Rollouts</strong> + Prometheus <code>AnalysisTemplate</code> querying <code>http://10.20.70.10:9090</code>.</td>
+                <td><span class="badge warn">P0 (High)</span></td>
+              </tr>
+              <tr>
+                <th>3. Internal PKI &amp; Automated TLS Everywhere</th>
+                <td>Zero-Trust Security</td>
+                <td>Eliminate manual self-signed certificates across Layer 1 VMs and Layer 2/3 Kubernetes Ingresses.</td>
+                <td><strong>HashiCorp Vault PKI Engine</strong> + <strong>cert-manager</strong> (<code>VaultIssuer</code>) + <code>vault-agent</code> auto-renewal.</td>
+                <td><span class="badge warn">P0 (High)</span></td>
+              </tr>
+              <tr>
+                <th>4. Ephemeral Kubernetes CI Runners</th>
+                <td>CI/CD Scalability</td>
+                <td>Replace static build VMs (<code>jenkins-agent-01..02</code>) with isolated, auto-scaled per-build pods.</td>
+                <td><strong>Jenkins Kubernetes Plugin</strong> (or GitLab Kubernetes Runner) running rootless Buildah pods.</td>
+                <td><span class="badge">P1 (Medium)</span></td>
+              </tr>
+              <tr>
+                <th>5. Supply-Chain Image Signing &amp; Admission Policy</th>
+                <td>Supply-Chain Security</td>
+                <td>Cryptographically verify that every pod running in Layer 3 passed the Jenkins Trivy gate.</td>
+                <td><strong>Sigstore Cosign</strong> (sign in Jenkins Stage 8) + <strong>Kyverno</strong> admission policy on Layer 3.</td>
+                <td><span class="badge">P1 (Medium)</span></td>
+              </tr>
+              <tr>
+                <th>6. Bare-Metal LoadBalancer VIP on Layer 3</th>
+                <td>Kubernetes Networking</td>
+                <td>Provide a resilient floating Virtual IP (<code>K8S_APP_INGRESS_VIP = 10.20.40.20</code>) for <code>ingress-nginx</code>.</td>
+                <td><strong>MetalLB</strong> (L2/BGP) or <strong>kube-vip</strong> across Layer 3 Worker Nodes.</td>
+                <td><span class="badge">P1 (Medium)</span></td>
+              </tr>
+              <tr>
+                <th>7. Cluster &amp; PVC Disaster Recovery to Garage S3</th>
+                <td>Backup &amp; DR</td>
+                <td>Schedule automated snapshots of Kubernetes cluster state, CRDs, and PVCs to Garage S3.</td>
+                <td><strong>Velero</strong> backing up to <code>https://10.20.60.10:9443</code> + systemd timer for Vault Raft snapshots.</td>
+                <td><span class="badge">P1 (Medium)</span></td>
+              </tr>
+              <tr>
+                <th>8. Unified SSO (OIDC) &amp; Distributed Tracing</th>
+                <td>Identity &amp; Observability</td>
+                <td>Single sign-on across GitLab, Jenkins, Nexus, Grafana, Argo CD, and Rancher + request trace correlation.</td>
+                <td><strong>Keycloak OIDC</strong> + <strong>OpenTelemetry Collector &amp; Grafana Tempo</strong>.</td>
+                <td><span class="badge ok">P2 (Enhancement)</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      // 1. Dark Mode Toggle (synced with <meta name="color-scheme">)
+      const btn = document.getElementById("theme-toggle");
+      const meta = document.querySelector('meta[name="color-scheme"]');
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function currentRenderedScheme() {
+        const stored = meta.content;
+        if (stored === "dark" || stored === "light") return stored;
+        return mq.matches ? "dark" : "light";
+      }
+
+      function updateLabel() {
+        const rendered = currentRenderedScheme();
+        btn.textContent = rendered === "dark" ? "Light Theme" : "Dark Theme";
+      }
+
+      btn.addEventListener("click", function () {
+        const target = currentRenderedScheme() === "dark" ? "light" : "dark";
+        const systemScheme = mq.matches ? "dark" : "light";
+        try {
+          if (target === systemScheme) {
+            localStorage.removeItem("color-scheme");
+            meta.content = "light dark";
+          } else {
+            localStorage.setItem("color-scheme", target);
+            meta.content = target;
+          }
+        } catch (_) {
+          meta.content = target === systemScheme ? "light dark" : target;
+        }
+        updateLabel();
+      });
+
+      mq.addEventListener("change", updateLabel);
+      window.addEventListener("storage", function (e) {
+        if (e.key === "color-scheme") {
+          meta.content = e.newValue ?? "light dark";
+          updateLabel();
+        }
+      });
+      updateLabel();
+
+      // 2. Interactive Tab Switcher
+      document.querySelectorAll('[role="tablist"]').forEach(function (tablist) {
+        const tabs = tablist.querySelectorAll('[role="tab"]');
+        tabs.forEach(function (tab) {
+          tab.addEventListener("click", function () {
+            const targetId = tab.getAttribute("data-tab-target");
+            tabs.forEach(function (t) { t.setAttribute("aria-selected", "false"); });
+            tab.setAttribute("aria-selected", "true");
+            const section = tablist.closest("section") || document;
+            section.querySelectorAll(".tab-panel").forEach(function (panel) {
+              panel.classList.toggle("active", panel.id === targetId);
+            });
+          });
+        });
+      });
+
+      // 3. One-Click Copy Buttons on Every <pre> Block
+      document.querySelectorAll("pre").forEach(function (pre) {
+        const wrap = document.createElement("div");
+        wrap.className = "code-wrap";
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "copy-btn";
+        copyBtn.textContent = "Copy";
+        copyBtn.addEventListener("click", function () {
+          const text = pre.innerText;
+          navigator.clipboard.writeText(text).then(function () {
+            copyBtn.textContent = "Copied!";
+            setTimeout(function () { copyBtn.textContent = "Copy"; }, 1600);
+          });
+        });
+        wrap.appendChild(copyBtn);
+      });
+
+      // 4. Instant Section Search Filter
+      const searchInput = document.getElementById("doc-search");
+      const sections = document.querySelectorAll("main .doc-section, main .hero-banner");
+      searchInput.addEventListener("input", function () {
+        const q = searchInput.value.trim().toLowerCase();
+        sections.forEach(function (sec) {
+          if (!q) {
+            sec.style.display = "";
+          } else {
+            const match = sec.innerText.toLowerCase().includes(q);
+            sec.style.display = match ? "" : "none";
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
