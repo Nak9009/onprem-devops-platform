@@ -40,11 +40,13 @@ PGBR_S3="${PGBR_S3:-false}"                           # true => pgBackRest repo 
 PGBR_S3_BUCKET="${PGBR_S3_BUCKET:-pgbackrest}"
 
 : "${PG_DB1_IP:?PG_DB1_IP not set (source platform.env)}"
-: "${PG_DB2_IP:?PG_DB2_IP not set}"
-: "${PG_DB3_IP:?PG_DB3_IP not set}"
+PG_DB2_IP="${PG_DB2_IP:-}"
+PG_DB3_IP="${PG_DB3_IP:-}"
 
 # ---- Production safety guard -------------------------------------------------
 if [[ "${PLATFORM_ENV:-}" == "production" ]]; then
+  : "${PG_DB2_IP:?PG_DB2_IP must be set in production}"
+  : "${PG_DB3_IP:?PG_DB3_IP must be set in production}"
   for v in PG_ADMIN_PASS PG_REPL_PASS PG_VRRP_PASS; do
     if [[ "${!v}" == ChangeMe_* ]]; then
       echo "ERROR: set a real ${v} before a production install" >&2
@@ -55,6 +57,11 @@ if [[ "${PLATFORM_ENV:-}" == "production" ]]; then
     echo "ERROR: production needs a shared pgBackRest repo (PGBR_S3=true); a per-node local repo breaks after failover" >&2
     exit 1
   fi
+fi
+
+SINGLE_DB_MODE="false"
+if [[ -z "${PG_DB2_IP}" || -z "${PG_DB3_IP}" || "${PG_DB2_IP}" == "${PG_DB1_IP}" ]]; then
+  SINGLE_DB_MODE="true"
 fi
 
 # ---- Role / index detection ---------------------------------------------------
@@ -215,9 +222,33 @@ systemctl disable postgresql || true
 pg_dropcluster --stop "${PG_VER}" main 2>/dev/null || true
 
 mkdir -p /etc/patroni /etc/pgbackrest /var/lib/pgbackrest /var/log/pgbackrest "/var/lib/postgresql/${PG_VER}"
-chown -R postgres:postgres /etc/patroni /etc/pgbackrest /var/lib/pgbackrest /var/log/pgbackrest
+chown -R postgres:postgres /etc/patroni /etc/pgbackrest /var/lib/pgbackrest /var/log/pgbackrest "/var/lib/postgresql/${PG_VER}"
+chmod 0700 "/var/lib/postgresql/${PG_VER}"
 
-echo "[2/6] Configuring 3-node etcd cluster..."
+if [[ "${SINGLE_DB_MODE}" == "true" ]]; then
+  echo "[2/6] Configuring single-node etcd (local compact profile)..."
+  ETCD_INIT_CLUSTER="pg-db1=http://${PG_DB1_IP}:2380"
+  EXPECTED_ETCD_MEMBERS=1
+  SYNC_MODE="false"
+  ETCD_HOSTS_YAML="    - ${PG_DB1_IP}:2379"
+  HBA_PEERS="    - host replication replicator ${PG_DB1_IP}/32 scram-sha-256
+    - host all postgres ${PG_DB1_IP}/32 scram-sha-256"
+else
+  echo "[2/6] Configuring 3-node etcd cluster..."
+  ETCD_INIT_CLUSTER="pg-db1=http://${PG_DB1_IP}:2380,pg-db2=http://${PG_DB2_IP}:2380,pg-db3=http://${PG_DB3_IP}:2380"
+  EXPECTED_ETCD_MEMBERS=3
+  SYNC_MODE="true"
+  ETCD_HOSTS_YAML="    - ${PG_DB1_IP}:2379
+    - ${PG_DB2_IP}:2379
+    - ${PG_DB3_IP}:2379"
+  HBA_PEERS="    - host replication replicator ${PG_DB1_IP}/32 scram-sha-256
+    - host replication replicator ${PG_DB2_IP}/32 scram-sha-256
+    - host replication replicator ${PG_DB3_IP}/32 scram-sha-256
+    - host all postgres ${PG_DB1_IP}/32 scram-sha-256
+    - host all postgres ${PG_DB2_IP}/32 scram-sha-256
+    - host all postgres ${PG_DB3_IP}/32 scram-sha-256"
+fi
+
 systemctl stop etcd || true
 # The Debian package starts a throw-away single-node etcd; wipe it once so the node can join the cluster
 if [[ ! -f /var/lib/etcd/.cluster-initialized ]]; then
@@ -230,17 +261,22 @@ ETCD_LISTEN_PEER_URLS="http://${NODE_IP}:2380"
 ETCD_LISTEN_CLIENT_URLS="http://${NODE_IP}:2379,http://127.0.0.1:2379"
 ETCD_INITIAL_ADVERTISE_PEER_URLS="http://${NODE_IP}:2380"
 ETCD_ADVERTISE_CLIENT_URLS="http://${NODE_IP}:2379"
-ETCD_INITIAL_CLUSTER="pg-db1=http://${PG_DB1_IP}:2380,pg-db2=http://${PG_DB2_IP}:2380,pg-db3=http://${PG_DB3_IP}:2380"
+ETCD_INITIAL_CLUSTER="${ETCD_INIT_CLUSTER}"
 ETCD_INITIAL_CLUSTER_TOKEN="pg-ha-etcd-token"
 ETCD_INITIAL_CLUSTER_STATE="new"
 EOF
 
 # Firewall: etcd, Patroni REST and PostgreSQL are reachable only from the right peers
 for peer in "${PG_DB1_IP}" "${PG_DB2_IP}" "${PG_DB3_IP}"; do
+  [[ -n "${peer}" ]] || continue
   ufw allow from "${peer}" to any port 2379:2380 proto tcp comment 'etcd quorum'
   ufw allow from "${peer}" to any port 5432 proto tcp comment 'PostgreSQL replication/peer'
   ufw allow from "${peer}" to any port 8008 proto tcp comment 'Patroni REST peer'
 done
+if [[ "${SINGLE_DB_MODE}" == "true" ]]; then
+  ufw allow from "${PG_CLIENT_CIDR}" to any port 5432 proto tcp comment 'PostgreSQL clients (single-node local)'
+  ufw allow from "${PG_CLIENT_CIDR}" to any port 8008 proto tcp comment 'Patroni REST health (single-node local)'
+fi
 for lb in "${PG_LB1_IP:-}" "${PG_LB2_IP:-}"; do
   [[ -n "${lb}" ]] || continue
   ufw allow from "${lb}" to any port 5432 proto tcp comment 'PostgreSQL from HAProxy'
@@ -253,21 +289,21 @@ fi
 
 systemctl enable etcd
 systemctl start --no-block etcd
-echo "Waiting for etcd quorum (start install.sh on all 3 DB nodes)..."
+echo "Waiting for etcd quorum (expected members: ${EXPECTED_ETCD_MEMBERS})..."
 etcd_ok=0
 for _ in $(seq 1 60); do
   if ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" endpoint health >/dev/null 2>&1 &&
-     [[ "$(ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" member list 2>/dev/null | wc -l)" -ge 3 ]]; then
+     [[ "$(ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" member list 2>/dev/null | wc -l)" -ge "${EXPECTED_ETCD_MEMBERS}" ]]; then
     etcd_ok=1; break
   fi
   sleep 5
 done
 if [[ ${etcd_ok} -ne 1 ]]; then
-  echo "ERROR: etcd cluster did not reach 3 members in 300s; run the script on the other DB nodes and retry" >&2
+  echo "ERROR: etcd cluster did not reach ${EXPECTED_ETCD_MEMBERS} member(s) in 300s; check other DB nodes and retry" >&2
   exit 1
 fi
 touch /var/lib/etcd/.cluster-initialized
-ETCDCTL_API=3 etcdctl --endpoints="http://${PG_DB1_IP}:2379,http://${PG_DB2_IP}:2379,http://${PG_DB3_IP}:2379" endpoint health || true
+ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" endpoint health || true
 
 echo "[3/6] Writing pgBackRest configuration..."
 if [[ "${PGBR_S3}" == "true" ]]; then
@@ -323,9 +359,7 @@ restapi:
 
 etcd3:
   hosts:
-    - ${PG_DB1_IP}:2379
-    - ${PG_DB2_IP}:2379
-    - ${PG_DB3_IP}:2379
+${ETCD_HOSTS_YAML}
 
 bootstrap:
   dcs:
@@ -333,7 +367,7 @@ bootstrap:
     loop_wait: 10
     retry_timeout: 10
     maximum_lag_on_failover: 1048576
-    synchronous_mode: true
+    synchronous_mode: ${SYNC_MODE}
     synchronous_mode_strict: false
     synchronous_node_count: 1
     postgresql:
@@ -356,13 +390,8 @@ bootstrap:
   pg_hba:
     - local all postgres peer
     - host replication replicator 127.0.0.1/32 scram-sha-256
-    - host replication replicator ${PG_DB1_IP}/32 scram-sha-256
-    - host replication replicator ${PG_DB2_IP}/32 scram-sha-256
-    - host replication replicator ${PG_DB3_IP}/32 scram-sha-256
     - host all postgres 127.0.0.1/32 scram-sha-256
-    - host all postgres ${PG_DB1_IP}/32 scram-sha-256
-    - host all postgres ${PG_DB2_IP}/32 scram-sha-256
-    - host all postgres ${PG_DB3_IP}/32 scram-sha-256
+${HBA_PEERS}
     - host all all ${PG_CLIENT_CIDR} scram-sha-256
 
 postgresql:

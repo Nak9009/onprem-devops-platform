@@ -473,6 +473,11 @@
       margin-block: 1rem 0.75rem;
     }
     .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: 2.25rem;
+      min-inline-size: 2.25rem;
       background: var(--surface-alt);
       color: var(--muted);
       border: 1px solid var(--border-strong);
@@ -828,35 +833,42 @@
           <span>2. Local Implementation (Multipass on macOS / Linux)</span>
           <span class="badge ok">Auto-Discovers Multipass DHCP IPs</span>
         </h2>
-        <h3>2.1 Create Local Multipass VMs</h3>
-        <p>Choose a profile based on your workstation RAM (<code>compact</code>: 7 VMs / ~16 GB RAM, <code>minimal</code>: 10 VMs / ~24 GB RAM, or <code>full</code>: 15 VMs / ~42 GB RAM):</p>
-        <pre><code># 1. Provision Ubuntu 24.04 VMs with cloud-init SSH keys and generate local inventory
-./multipass/create-vms.sh minimal
-./multipass/status.sh</code></pre>
-
-        <h3>2.2 Option A (Ansible) vs. Option B (Manual Install Scripts)</h3>
-        <div class="tab-bar" role="tablist" aria-label="Local Installation Methods">
-          <button type="button" class="tab-btn" role="tab" aria-selected="true" data-tab-target="local-tab-manual">Option A: Manual Scripts (devops-cli.sh)</button>
-          <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab-target="local-tab-ansible">Option B: Ansible Playbooks</button>
+        <h3>2.1 Select Local Multipass Sizing Profile (Compact vs. Minimal vs. Full HA)</h3>
+        <p>Select your workstation profile below to view the exact VM footprint, provisioning command, and installation sequence:</p>
+        <div class="tab-bar" role="tablist" aria-label="Local Multipass Profiles">
+          <button type="button" class="tab-btn" role="tab" id="tab-btn-compact" aria-selected="true" aria-controls="profile-tab-compact" data-tab-target="profile-tab-compact">Compact (7 VMs / ~16.5 GB RAM)</button>
+          <button type="button" class="tab-btn" role="tab" id="tab-btn-minimal" aria-selected="false" aria-controls="profile-tab-minimal" data-tab-target="profile-tab-minimal" tabindex="-1">Minimal (7–10 VMs / ~20–24 GB RAM)</button>
+          <button type="button" class="tab-btn" role="tab" id="tab-btn-full" aria-selected="false" aria-controls="profile-tab-full" data-tab-target="profile-tab-full" tabindex="-1">Full HA (19 VMs / ~56 GB RAM)</button>
         </div>
-        <div id="local-tab-manual" class="tab-panel active">
-          <pre><code># Inspect discovered Multipass IPs and install order
+
+        <!-- PROFILE 1: COMPACT -->
+        <div id="profile-tab-compact" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-compact">
+          <div class="callout info">
+            <strong>Compact Profile (<code>multipass/profiles/compact.conf</code>):</strong>
+            Designed for 16–24 GB RAM laptops. Launches <strong>7 VMs</strong> (~16.5 GB total RAM, 200 GB thin-provisioned disk):
+            <code>devops-gitlab</code> (3.5G), <code>devops-jenkins</code> (2G), <code>devops-nexus</code> (2.5G, co-hosts Garage S3),
+            <code>pg-db1</code> (1.5G, single-node Patroni + etcd + Redis), <code>k8s-mgmt-cp01</code> (2.5G, Layer 2 Mgmt K8s + Argo CD + Rancher),
+            <code>k8s-cp01</code> (3G, Layer 3 App K8s single-node), and <code>devops-monitor</code> (1.5G, Prometheus + Grafana + Loki + Vault).
+          </div>
+          <pre><code># 1. Provision the 7-VM Compact profile (Ubuntu 24.04 LTS)
+./multipass/create-vms.sh --profile compact
+./multipass/status.sh
+
+# 2. Inspect discovered Multipass IPs and install order
 ./manual-install/devops-cli.sh --env local env
 ./manual-install/devops-cli.sh --env local list
 
-# 1. Baseline all local VMs
-for vm in devops-gitlab devops-jenkins devops-nexus pg-db1 pg-db2 pg-db3 k8s-mgmt-cp01 k8s-cp01 k8s-worker01 devops-monitor; do
+# 3. Baseline all 7 Compact Multipass VMs
+for vm in devops-gitlab devops-jenkins devops-nexus pg-db1 k8s-mgmt-cp01 k8s-cp01 devops-monitor; do
   ./manual-install/devops-cli.sh --env local multipass-install common "$vm"
 done
 
-# 2. Layer 1, Layer 2, and Layer 3 installation
+# 4. Install Layer 1, Layer 2, and Layer 3 services
 ./manual-install/devops-cli.sh --env local multipass-install gitlab            devops-gitlab
 ./manual-install/devops-cli.sh --env local multipass-install nexus             devops-nexus
 ./manual-install/devops-cli.sh --env local multipass-install minio             devops-nexus
 ./manual-install/devops-cli.sh --env local multipass-install jenkins           devops-jenkins
 ./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db1
-./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db2
-./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db3
 ./manual-install/devops-cli.sh --env local multipass-install redis             pg-db1
 ./manual-install/devops-cli.sh --env local multipass-install vault             devops-monitor
 ./manual-install/devops-cli.sh --env local multipass-install monitoring        devops-monitor
@@ -864,25 +876,127 @@ done
 ./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp01
 ./manual-install/devops-cli.sh --env local multipass-install rancher           k8s-mgmt-cp01
 ./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp01
-./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker01
 
-# 3. Verify all local endpoints
+# 5. Verify all local endpoints
 ./manual-install/devops-cli.sh --env local status</code></pre>
         </div>
-        <div id="local-tab-ansible" class="tab-panel">
-          <pre><code># Install required Ansible collections
+
+        <!-- PROFILE 2: MINIMAL -->
+        <div id="profile-tab-minimal" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-minimal">
+          <div class="callout info">
+            <strong>Minimal Profile (<code>multipass/profiles/minimal.conf</code>):</strong>
+            Designed for 24–32 GB RAM workstations. Allocates higher memory/disk headroom across the 7 core VMs (~20 GB RAM, 320 GB disk:
+            <code>devops-gitlab</code> 4G, <code>devops-jenkins</code> 3G, <code>devops-nexus</code> 3G, <code>pg-db1</code> 2G,
+            <code>devops-monitor</code> 2G, <code>k8s-mgmt-cp01</code> 3G, <code>k8s-cp01</code> 3G) and supports adding 3-node PostgreSQL HA
+            (<code>pg-db2</code>, <code>pg-db3</code>) and a dedicated worker (<code>k8s-worker01</code>).
+          </div>
+          <pre><code># 1. Provision the Minimal profile (or selectively launch specific VMs with --only)
+./multipass/create-vms.sh --profile minimal
+# Optional: add 3-node DB quorum + dedicated K8s worker (10 VMs total)
+# ./multipass/create-vms.sh --profile ha --only pg-db2,pg-db3,k8s-worker01
+./multipass/status.sh
+
+# 2. Baseline all running Minimal VMs (7 core VMs, or 10 VMs if pg-db2/pg-db3/k8s-worker01 are running)
+for vm in $(multipass list --format csv | awk -F, '$2=="Running"{print $1}'); do
+  ./manual-install/devops-cli.sh --env local multipass-install common "$vm"
+done
+
+# 3. Install Layer 1, Layer 2, and Layer 3 services
+./manual-install/devops-cli.sh --env local multipass-install gitlab            devops-gitlab
+./manual-install/devops-cli.sh --env local multipass-install nexus             devops-nexus
+./manual-install/devops-cli.sh --env local multipass-install minio             devops-nexus
+./manual-install/devops-cli.sh --env local multipass-install jenkins           devops-jenkins
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db1
+# If pg-db2 and pg-db3 are running, run postgresql-ha on all 3 DB nodes for 3-node etcd + Patroni quorum:
+# ./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db2
+# ./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db3
+./manual-install/devops-cli.sh --env local multipass-install redis             pg-db1
+./manual-install/devops-cli.sh --env local multipass-install vault             devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install monitoring        devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install logging           devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local multipass-install rancher           k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp01
+# If k8s-worker01 is running, join it to the Layer 3 App K8s cluster:
+# ./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker01
+
+# 4. Verify all local endpoints
+./manual-install/devops-cli.sh --env local status</code></pre>
+        </div>
+
+        <!-- PROFILE 3: FULL HA -->
+        <div id="profile-tab-full" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-full">
+          <div class="callout warn">
+            <strong>Full HA Simulation Profile (<code>multipass/profiles/ha.conf</code>):</strong>
+            Requires a 48–64+ GB RAM workstation. Launches <strong>19 VMs</strong> (~56 GB RAM) simulating full multi-node HA quorum and failover:
+            dedicated <code>devops-jenkins-agent01</code>, dedicated <code>devops-minio01</code>, 3-node PostgreSQL Patroni + etcd (<code>pg-db1..3</code>),
+            dedicated <code>devops-redis01</code>, dedicated <code>devops-backup</code>, 3-node Layer 2 Mgmt K8s (<code>k8s-mgmt-cp01..03</code>),
+            and 6-node Layer 3 App K8s (<code>k8s-cp01..03</code> + <code>k8s-worker01..03</code>).
+          </div>
+          <pre><code># 1. Provision the Full 19-VM HA topology
+./multipass/create-vms.sh --profile ha
+./multipass/status.sh
+
+# 2. Baseline all 19 Full HA VMs
+for vm in \
+  devops-gitlab devops-jenkins devops-jenkins-agent01 devops-nexus devops-minio01 \
+  pg-db1 pg-db2 pg-db3 devops-redis01 devops-monitor devops-backup \
+  k8s-mgmt-cp01 k8s-mgmt-cp02 k8s-mgmt-cp03 \
+  k8s-cp01 k8s-cp02 k8s-cp03 k8s-worker01 k8s-worker02 k8s-worker03; do
+  ./manual-install/devops-cli.sh --env local multipass-install common "$vm"
+done
+
+# 3. Layer 1A: DevOps & Artifact Storage
+./manual-install/devops-cli.sh --env local multipass-install gitlab            devops-gitlab
+./manual-install/devops-cli.sh --env local multipass-install nexus             devops-nexus
+./manual-install/devops-cli.sh --env local multipass-install minio             devops-minio01
+./manual-install/devops-cli.sh --env local multipass-install jenkins           devops-jenkins
+./manual-install/devops-cli.sh --env local multipass-install jenkins-agent     devops-jenkins-agent01
+
+# 4. Layer 1B: 3-Node PostgreSQL 16 HA (run in parallel for etcd quorum) + Dedicated Redis
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db1 &amp;
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db2 &amp;
+./manual-install/devops-cli.sh --env local multipass-install postgresql-ha     pg-db3 &amp;
+wait
+./manual-install/devops-cli.sh --env local multipass-install redis             devops-redis01
+
+# 5. Layer 1C: Vault, Monitoring & Centralized Logging
+./manual-install/devops-cli.sh --env local multipass-install vault             devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install monitoring        devops-monitor
+./manual-install/devops-cli.sh --env local multipass-install logging           devops-monitor
+
+# 6. Layer 2: 3-Node HA Management Kubernetes Cluster + Rancher + Argo CD
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp02
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-mgmt   k8s-mgmt-cp03
+./manual-install/devops-cli.sh --env local multipass-install rancher           k8s-mgmt-cp01
+
+# 7. Layer 3: 6-Node HA Application Kubernetes Cluster (3 CP + 3 Workers)
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp02
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-cp     k8s-cp03
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker01
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker02
+./manual-install/devops-cli.sh --env local multipass-install kubernetes-worker k8s-worker03
+
+# 8. Verify all local endpoints
+./manual-install/devops-cli.sh --env local status</code></pre>
+        </div>
+
+        <h3>2.2 Alternative: Automated Local Provisioning via Ansible Playbooks</h3>
+        <p>All three profiles (<code>compact</code>, <code>minimal</code>, and <code>ha</code>) automatically generate <code>inventories/local/hosts.yml</code> when <code>./multipass/create-vms.sh</code> runs, so you can also provision any profile end-to-end with Ansible:</p>
+        <pre><code># Install required Ansible collections
 ansible-galaxy collection install -r requirements.yml
 
 # Create your local Ansible Vault file from the example
 cp inventories/local/group_vars/vault.yml.example inventories/local/group_vars/vault.yml
 
-# Run the complete 3-layer playbook against Multipass
+# Run the complete 3-layer playbook against the active Multipass profile inventory
 ansible-playbook -i inventories/local/hosts.yml playbooks/site.yml
 
 # Validate all services and network connectivity
 ./scripts/validate-network.sh -i inventories/local/hosts.yml
 ./scripts/validate-services.sh -i inventories/local/hosts.yml</code></pre>
-        </div>
       </section>
 
       <section class="doc-section" id="prod-prereqs">
@@ -1465,18 +1579,37 @@ ssh ansible@10.20.60.11 "sudo garage status &amp;&amp; sudo garage bucket list"<
       });
       updateLabel();
 
-      // 2. Interactive Tab Switcher
+      // 2. Interactive Tab Switcher (with keyboard arrow navigation & scoped panels)
       document.querySelectorAll('[role="tablist"]').forEach(function (tablist) {
-        const tabs = tablist.querySelectorAll('[role="tab"]');
-        tabs.forEach(function (tab) {
+        const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+        function activateTab(tab, focusTab) {
+          const targetId = tab.getAttribute("data-tab-target");
+          tabs.forEach(function (t) {
+            const isSelected = t === tab;
+            t.setAttribute("aria-selected", isSelected ? "true" : "false");
+            t.setAttribute("tabindex", isSelected ? "0" : "-1");
+            const panelId = t.getAttribute("data-tab-target");
+            const panel = panelId ? document.getElementById(panelId) : null;
+            if (panel) {
+              panel.classList.toggle("active", panelId === targetId);
+            }
+          });
+          if (focusTab) tab.focus();
+        }
+        tabs.forEach(function (tab, idx) {
           tab.addEventListener("click", function () {
-            const targetId = tab.getAttribute("data-tab-target");
-            tabs.forEach(function (t) { t.setAttribute("aria-selected", "false"); });
-            tab.setAttribute("aria-selected", "true");
-            const section = tablist.closest("section") || document;
-            section.querySelectorAll(".tab-panel").forEach(function (panel) {
-              panel.classList.toggle("active", panel.id === targetId);
-            });
+            activateTab(tab, false);
+          });
+          tab.addEventListener("keydown", function (e) {
+            let nextIdx = -1;
+            if (e.key === "ArrowRight") nextIdx = (idx + 1) % tabs.length;
+            else if (e.key === "ArrowLeft") nextIdx = (idx - 1 + tabs.length) % tabs.length;
+            else if (e.key === "Home") nextIdx = 0;
+            else if (e.key === "End") nextIdx = tabs.length - 1;
+            if (nextIdx !== -1) {
+              e.preventDefault();
+              activateTab(tabs[nextIdx], true);
+            }
           });
         });
       });

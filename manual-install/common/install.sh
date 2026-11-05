@@ -21,6 +21,23 @@ NODE_EXP_VER="${NODE_EXP_VER:-1.8.2}"
 ARCH="$(dpkg --print-architecture)"
 
 echo "[1/5] Installing baseline packages & disabling swap..."
+# Ensure hostname resolves locally (prevents sudo reverse-DNS delays)
+if ! grep -qw "$(hostname -s)" /etc/hosts; then
+  echo "127.0.1.1 $(hostname -s)" >> /etc/hosts
+fi
+
+# Configure reliable DNS fallback & IPv4 preference for apt (prevents dead IPv6 DNS timeouts on local hypervisors)
+if [[ -d /etc/systemd ]]; then
+  mkdir -p /etc/systemd/resolved.conf.d
+  cat >/etc/systemd/resolved.conf.d/99-devops-dns.conf <<EOF
+[Resolve]
+DNS=${DNS_SERVERS:-1.1.1.1 8.8.8.8}
+FallbackDNS=1.0.0.1 8.8.4.4
+EOF
+  systemctl restart systemd-resolved 2>/dev/null || true
+fi
+echo 'Acquire::ForceIPv4 "true";' >/etc/apt/apt.conf.d/99force-ipv4
+
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   ca-certificates curl wget gnupg lsb-release apt-transport-https \
@@ -95,17 +112,21 @@ echo "[4/5] Installing Prometheus Node Exporter v${NODE_EXP_VER}..."
 groupadd --system node_exporter 2>/dev/null || true
 useradd --system --no-create-home --shell /usr/sbin/nologin -g node_exporter node_exporter 2>/dev/null || true
 
-NE_TMP="$(mktemp -d)"
-trap 'rm -rf "${NE_TMP}"' EXIT
-NE_BASE="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXP_VER}"
-NE_TAR="node_exporter-${NODE_EXP_VER}.linux-${ARCH}.tar.gz"
-curl -fsSL "${NE_BASE}/${NE_TAR}" -o "${NE_TMP}/${NE_TAR}"
-curl -fsSL "${NE_BASE}/sha256sums.txt" -o "${NE_TMP}/sha256sums.txt"
-(cd "${NE_TMP}" && grep " ${NE_TAR}\$" sha256sums.txt | sha256sum -c -)
-tar -xzf "${NE_TMP}/${NE_TAR}" -C "${NE_TMP}"
-cp "${NE_TMP}/node_exporter-${NODE_EXP_VER}.linux-${ARCH}/node_exporter" /usr/local/bin/node_exporter
-chown node_exporter:node_exporter /usr/local/bin/node_exporter
-chmod 0755 /usr/local/bin/node_exporter
+if ! /usr/local/bin/node_exporter --version 2>&1 | grep -q "version ${NODE_EXP_VER} "; then
+  NE_TMP="$(mktemp -d)"
+  trap 'rm -rf "${NE_TMP}"' EXIT
+  NE_BASE="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXP_VER}"
+  NE_TAR="node_exporter-${NODE_EXP_VER}.linux-${ARCH}.tar.gz"
+  curl -4 -fsSL --retry 5 --retry-delay 2 --retry-all-errors "${NE_BASE}/${NE_TAR}" -o "${NE_TMP}/${NE_TAR}"
+  curl -4 -fsSL --retry 5 --retry-delay 2 --retry-all-errors "${NE_BASE}/sha256sums.txt" -o "${NE_TMP}/sha256sums.txt"
+  (cd "${NE_TMP}" && grep " ${NE_TAR}\$" sha256sums.txt | sha256sum -c -)
+  tar -xzf "${NE_TMP}/${NE_TAR}" -C "${NE_TMP}"
+  install -m 0755 -o node_exporter -g node_exporter \
+    "${NE_TMP}/node_exporter-${NODE_EXP_VER}.linux-${ARCH}/node_exporter" \
+    /usr/local/bin/node_exporter
+else
+  echo "node_exporter v${NODE_EXP_VER} already installed; skipping download."
+fi
 
 cat >/etc/systemd/system/node_exporter.service <<'EOF'
 [Unit]
@@ -135,9 +156,17 @@ else
   ufw allow 9100/tcp comment 'Prometheus Node Exporter'
 fi
 systemctl daemon-reload
-systemctl enable --now node_exporter
+systemctl enable node_exporter
+systemctl restart node_exporter
 
 echo "[5/5] Verifying baseline services..."
-curl -fsS http://127.0.0.1:9100/metrics | head -n 5
+for _ in $(seq 1 15); do
+  if curl -fsS http://127.0.0.1:9100/metrics >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+metrics_out="$(curl -fsS http://127.0.0.1:9100/metrics)"
+sed -n '1,5p' <<<"${metrics_out}"
 echo "Common baseline installation complete."
 

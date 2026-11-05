@@ -21,6 +21,7 @@ elif [[ -f "${BASE_DIR}/${TARGET_ENV}.env" ]]; then
 else
   ENV_FILE="${BASE_DIR}/platform.env"
 fi
+export PLATFORM_ENV_FILE="${ENV_FILE}"
 
 if [[ -f "${ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
@@ -53,8 +54,9 @@ Commands:
   env                              Display active global variables from platform.env
   list                             List all 15 server install modules and target IPs
   install <module>                 Run <module>/install.sh locally on this server
-  remote-install <module> <host>   Copy platform.env + <module>/install.sh to <user@host> and execute via SSH
-  install-clis                     Install all operator client CLIs (kubectl, helm, argocd, rancher, glab, mc, logcli, trivy, vault, psql, redis-cli)
+  multipass-install <module> <vm>  Copy platform.env + <module> into a Multipass VM and execute via 'multipass exec'
+  remote-install <module> <host>   Copy platform.env + <module>/install.sh to <user@host> (or Multipass VM) and execute
+  install-clis                     Install all operator client CLIs (kubectl, helm, argocd, rancher, glab, garage, logcli, trivy, vault, psql, redis-cli)
   status                           Check live TCP/HTTP health across Layer 1, Layer 2, and Layer 3 endpoints
 EOF
 }
@@ -128,6 +130,67 @@ cmd_install() {
   sudo -E bash "${BASE_DIR}/${mod}/install.sh"
 }
 
+write_resolved_env() {
+  local out_file="$1"
+  cat "${ENV_FILE}" > "${out_file}"
+  cat >> "${out_file}" <<EOF
+
+# --- Host-Resolved Live Environment Overrides ---
+export PLATFORM_ENV="${PLATFORM_ENV:-${TARGET_ENV}}"
+export GITLAB_IP="${GITLAB_IP}"
+export JENKINS_IP="${JENKINS_IP}"
+export JENKINS_AGENT01_IP="${JENKINS_AGENT01_IP}"
+export NEXUS_IP="${NEXUS_IP}"
+export MINIO_VIP="${MINIO_VIP}"
+export PG_DB1_IP="${PG_DB1_IP}"
+export PG_DB2_IP="${PG_DB2_IP:-}"
+export PG_DB3_IP="${PG_DB3_IP:-}"
+export PG_LB1_IP="${PG_LB1_IP}"
+export PG_LB2_IP="${PG_LB2_IP:-}"
+export PG_VIP="${PG_VIP}"
+export PG_RO_VIP="${PG_RO_VIP}"
+export REDIS_IP="${REDIS_IP}"
+export MONITOR_IP="${MONITOR_IP}"
+export LOKI_SERVER_IP="${LOKI_SERVER_IP}"
+export BACKUP_IP="${BACKUP_IP}"
+export VAULT_IP="${VAULT_IP}"
+export K8S_MGMT_CP01_IP="${K8S_MGMT_CP01_IP}"
+export K8S_MGMT_VIP="${K8S_MGMT_VIP}"
+export K8S_APP_CP01_IP="${K8S_APP_CP01_IP}"
+export K8S_APP_VIP="${K8S_APP_VIP}"
+export K8S_APP_WORKER01_IP="${K8S_APP_WORKER01_IP}"
+export GITLAB_URL="${GITLAB_URL}"
+EOF
+}
+
+cmd_multipass_install() {
+  local mod="${1:-}"
+  local vm="${2:-}"
+  if [[ -z "${mod}" || -z "${vm}" || ! -f "${BASE_DIR}/${mod}/install.sh" ]]; then
+    echo "Usage: ./manual-install/devops-cli.sh --env local multipass-install <module> <vm-name>" >&2
+    exit 1
+  fi
+  if ! command -v multipass >/dev/null 2>&1; then
+    echo "[ERROR] 'multipass' CLI not found on PATH." >&2
+    exit 1
+  fi
+
+  local tmp_env
+  tmp_env="$(mktemp)"
+  write_resolved_env "${tmp_env}"
+
+  echo "[INFO] Deploying '${mod}' to Multipass VM '${vm}' via multipass transfer/exec (env: ${TARGET_ENV})..."
+  multipass exec "${vm}" -- bash -c "rm -rf /tmp/manual-install/${mod} && mkdir -p /tmp/manual-install"
+  multipass transfer "${tmp_env}" "${vm}:/tmp/manual-install/platform.env"
+  rm -f "${tmp_env}"
+  multipass transfer -r "${BASE_DIR}/${mod}" "${vm}:/tmp/manual-install/${mod}"
+  if [[ "${mod}" == "kubernetes-mgmt" ]]; then
+    multipass exec "${vm}" -- bash -c "rm -rf /tmp/manual-install/kubernetes-cp"
+    multipass transfer -r "${BASE_DIR}/kubernetes-cp" "${vm}:/tmp/manual-install/kubernetes-cp"
+  fi
+  multipass exec "${vm}" -- sudo PLATFORM_ENV_FILE=/tmp/manual-install/platform.env bash "/tmp/manual-install/${mod}/install.sh"
+}
+
 cmd_remote_install() {
   local mod="${1:-}"
   local target="${2:-}"
@@ -136,24 +199,28 @@ cmd_remote_install() {
     exit 1
   fi
 
+  # If target is a running Multipass VM name (without '@'), use native multipass transfer/exec
+  if [[ "${target}" != *"@"* ]] && command -v multipass >/dev/null 2>&1; then
+    if multipass list --format csv 2>/dev/null | grep -q "^${target},Running,"; then
+      cmd_multipass_install "${mod}" "${target}"
+      return 0
+    fi
+  fi
+
   local ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
   local mp_key="${BASE_DIR}/../multipass/.ssh/id_ed25519"
   if [[ "${TARGET_ENV}" == "local" && -f "${mp_key}" ]]; then
     ssh_opts+=(-i "${mp_key}")
   fi
 
-  # If target is a Multipass VM name without '@', resolve its IP and prepend SSH_USER@
-  if [[ "${target}" != *"@"* ]] && command -v multipass >/dev/null 2>&1; then
-    local resolved_ip
-    resolved_ip="$(multipass list --format csv 2>/dev/null | awk -F',' -v v="${target}" '$1==v && $2=="Running" {print $3}' | awk '{print $1}')"
-    if [[ -n "${resolved_ip}" ]]; then
-      target="${SSH_USER:-ansible}@${resolved_ip}"
-    fi
-  fi
+  local tmp_env
+  tmp_env="$(mktemp)"
+  write_resolved_env "${tmp_env}"
 
   echo "[INFO] Deploying '${mod}' to remote host ${target} (env: ${TARGET_ENV})..."
   ssh "${ssh_opts[@]}" "${target}" "mkdir -p /tmp/manual-install/${mod}"
-  scp -q "${ssh_opts[@]}" "${ENV_FILE}" "${target}:/tmp/manual-install/platform.env"
+  scp -q "${ssh_opts[@]}" "${tmp_env}" "${target}:/tmp/manual-install/platform.env"
+  rm -f "${tmp_env}"
   scp -q "${ssh_opts[@]}" -r "${BASE_DIR}/${mod}/"* "${target}:/tmp/manual-install/${mod}/"
   if [[ "${mod}" == "kubernetes-mgmt" ]]; then
     ssh "${ssh_opts[@]}" "${target}" "mkdir -p /tmp/manual-install/kubernetes-cp"
@@ -215,7 +282,7 @@ cmd_status() {
   check_http "Sonatype Nexus"     "http://${NEXUS_IP}:8081/service/rest/v1/status"  "devops-nexus"
   check_http "Garage S3 API"      "https://${MINIO_VIP}:${GARAGE_TLS_PORT:-9443}/health" "devops-nexus"
   check_tcp  "PostgreSQL RW VIP"  "${PG_VIP}" "5432"                                "pg-db1"
-  check_tcp  "PostgreSQL RO VIP"  "${PG_VIP}" "5433"                                "pg-db1"
+  check_tcp  "PostgreSQL RO VIP"  "${PG_VIP}" "5433"                                "pg-lb1"
   check_http "Patroni pg-db1"     "http://${PG_DB1_IP}:8008/health"                 "pg-db1"
   check_tcp  "Redis Server"       "${REDIS_IP}" "6379"                              "pg-db1"
   check_http "Prometheus"         "http://${MONITOR_IP}:9090/-/healthy"             "devops-monitor"
@@ -242,6 +309,10 @@ case "${1:-}" in
   install)
     shift
     cmd_install "$@"
+    ;;
+  multipass-install)
+    shift
+    cmd_multipass_install "$@"
     ;;
   remote-install)
     shift
