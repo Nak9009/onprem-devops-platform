@@ -680,6 +680,8 @@
       <ul>
         <li><a href="#verify-health">Health Checks &amp; Failover Drills</a></li>
         <li><a href="#recommended-features">Enterprise Feature Roadmap</a></li>
+        <li><a href="#disaster-recovery">Disaster Recovery (Backup &amp; Restore)</a></li>
+        <li><a href="#troubleshooting-matrix">Troubleshooting &amp; Operations</a></li>
       </ul>
     </nav>
 
@@ -1527,6 +1529,121 @@ ssh ansible@10.20.60.11 "sudo garage status &amp;&amp; sudo garage bucket list"<
                 <td>Single sign-on across GitLab, Jenkins, Nexus, Grafana, Argo CD, and Rancher + request trace correlation.</td>
                 <td><strong>Keycloak OIDC</strong> + <strong>OpenTelemetry Collector &amp; Grafana Tempo</strong>.</td>
                 <td><span class="badge ok">P2 (Enhancement)</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="disaster-recovery">7.3 Disaster Recovery: Tiered Backup &amp; Restore Playbooks</h3>
+        <p>Adopt enterprise-grade data lifecycle protection modeled after mission-critical on-premises setups:</p>
+        <div tabindex="0" role="region" aria-labelledby="dr-caption" class="table-wrapper">
+          <table style="--label-2: 'Protected Component'; --label-3: 'Backup Mechanism &amp; Schedule'; --label-4: 'Destination Storage'; --label-5: 'Restore Command / Recovery Playbook';">
+            <caption id="dr-caption">Tiered On-Premises Backup &amp; Restoration Matrix</caption>
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Protected Component</th>
+                <th>Backup Mechanism &amp; Schedule</th>
+                <th>Destination Storage</th>
+                <th>Restore Command / Recovery Playbook</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Tier 1: Databases</th>
+                <td><strong>PostgreSQL 16 HA Cluster</strong></td>
+                <td>Continuous WAL archiving + daily differential / weekly full snapshot via <code>pgBackRest</code> (cron <code>02:00 UTC</code>)</td>
+                <td>Garage S3 bucket <code>s3://pgbackrest</code> (factor 3 replicated across 4 nodes)</td>
+                <td><code>sudo -u postgres pgbackrest --stanza=main --type=time "--target=2026-11-05 12:00:00" restore</code></td>
+              </tr>
+              <tr>
+                <th>Tier 1: Databases</th>
+                <td><strong>Redis Cache / State</strong></td>
+                <td>Automated hourly RDB snapshots (<code>save 3600 1 300 100 60 10000</code>) + AOF append-only logs</td>
+                <td>Local disk <code>/var/lib/redis/dump.rdb</code> + daily rsync to Backup host</td>
+                <td>Stop service &rarr; replace <code>/var/lib/redis/dump.rdb</code> &rarr; <code>chown redis:redis</code> &rarr; restart Redis</td>
+              </tr>
+              <tr>
+                <th>Tier 2: Secrets &amp; PKI</th>
+                <td><strong>HashiCorp Vault</strong></td>
+                <td>Automated hourly Vault Raft database snapshot via systemd timer + token authenticated API</td>
+                <td><code>/var/backups/vault/vault-raft-*.snap</code> &rarr; encrypted upload to Garage S3</td>
+                <td><code>vault operator raft snapshot restore -force /var/backups/vault/vault-raft-latest.snap</code></td>
+              </tr>
+              <tr>
+                <th>Tier 3: S3 Object Storage</th>
+                <td><strong>Garage S3 Metadata &amp; Data</strong></td>
+                <td>Cluster topology replication (factor 3) across 4 nodes + daily metadata snapshot via <code>garage-backup.sh</code></td>
+                <td><code>/var/lib/garage/meta</code> snapshot + remote cold storage mirror</td>
+                <td>Re-provision node with same node secret &rarr; <code>garage layout assign</code> &rarr; cluster re-syncs data blocks</td>
+              </tr>
+              <tr>
+                <th>Tier 4: Kubernetes State</th>
+                <td><strong>Layer 2 Mgmt &amp; Layer 3 App K8s</strong></td>
+                <td>Daily <code>etcdctl snapshot save</code> (03:00 UTC) + <strong>Velero</strong> namespace / PVC backups</td>
+                <td>Garage S3 bucket <code>s3://k8s-backups</code> + <code>/var/backups/k8s-etcd/</code></td>
+                <td><code>etcdctl snapshot restore /var/backups/k8s-etcd/snapshot.db</code> (or <code>velero restore create --from-backup &lt;name&gt;</code>)</td>
+              </tr>
+              <tr>
+                <th>Tier 5: Code &amp; Binaries</th>
+                <td><strong>GitLab CE &amp; Sonatype Nexus</strong></td>
+                <td><code>gitlab-backup create</code> (01:00 UTC) + Nexus blobstore backup script</td>
+                <td>Garage S3 bucket <code>s3://gitlab-backups</code> and <code>s3://nexus-blobs</code></td>
+                <td><code>gitlab-backup restore BACKUP=&lt;timestamp&gt;</code> &amp;&amp; <code>gitlab-ctl reconfigure</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="troubleshooting-matrix">7.4 Troubleshooting &amp; Operational Health Runbooks</h3>
+        <p>Quick-reference operational recipes for diagnosing and resolving the most common production incidents:</p>
+        <div tabindex="0" role="region" aria-labelledby="ts-caption" class="table-wrapper">
+          <table style="--label-2: 'Symptoms &amp; Detection'; --label-3: 'Root Cause Diagnostics'; --label-4: 'Immediate Remediation'; --label-5: 'Permanent Fix / Prevention';">
+            <caption id="ts-caption">Common Infrastructure Failures &amp; Root-Cause Resolution</caption>
+            <thead>
+              <tr>
+                <th>Incident Domain</th>
+                <th>Symptoms &amp; Detection</th>
+                <th>Root Cause Diagnostics</th>
+                <th>Immediate Remediation</th>
+                <th>Permanent Fix / Prevention</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>PostgreSQL HA Quorum Loss</th>
+                <td>Port <code>5432</code> returns connection refused; Patroni health check <code>:8008/health</code> returns HTTP 503</td>
+                <td>Run <code>sudo patronictl -c /etc/patroni/config.yml list</code> &amp; <code>etcdctl endpoint health</code></td>
+                <td>Restart etcd cluster service: <code>sudo systemctl restart etcd patroni</code>. If split-brain, pause patroni and elect leader manually.</td>
+                <td>Ensure network latency between DB nodes is &lt; 10ms; keep etcd dedicated to low-latency SSD storage.</td>
+              </tr>
+              <tr>
+                <th>HashiCorp Vault Sealed</th>
+                <td>Port <code>8200/v1/sys/health</code> returns HTTP 501 or 503; apps fail with secret retrieval timeouts</td>
+                <td>Run <code>vault status</code>; check <code>journalctl -u vault -n 50</code></td>
+                <td>Execute unseal keys: <code>vault operator unseal &lt;key-1&gt;</code> &amp; <code>vault operator unseal &lt;key-2&gt;</code> (or unseal via Transit key).</td>
+                <td>Configure Vault Transit Auto-Unseal or AWS/GCP KMS auto-unseal to eliminate manual intervention after host reboots.</td>
+              </tr>
+              <tr>
+                <th>Kubernetes Node NotReady</th>
+                <td><code>kubectl get nodes</code> shows <code>NotReady</code> status on worker node; pods evicted</td>
+                <td>Inspect node events: <code>kubectl describe node &lt;node-name&gt;</code> &amp; <code>journalctl -u kubelet -n 50</code></td>
+                <td>Check container runtime: <code>sudo systemctl restart containerd kubelet</code>; check disk pressure (<code>df -h</code>).</td>
+                <td>Configure kubelet image garbage collection thresholds (<code>imageGCHighThresholdPercent: 80</code>) and log rotation.</td>
+              </tr>
+              <tr>
+                <th>Jenkins CI Agent Disconnected</th>
+                <td>Build jobs queued indefinitely waiting for an executor; agent shows offline in Jenkins UI</td>
+                <td>Check agent SSH/JNLP connection: <code>ssh ansible@&lt;agent-ip&gt; "systemctl status jenkins-agent"</code></td>
+                <td>Restart agent process: <code>sudo systemctl restart jenkins-agent</code>; verify SSH credentials in Jenkins credentials store.</td>
+                <td>Migrate to the <strong>Jenkins Kubernetes Plugin</strong> to spin up ephemeral pod agents on demand, eliminating static agent VMs.</td>
+              </tr>
+              <tr>
+                <th>GitOps Sync Drift / OutOfSync</th>
+                <td>Argo CD UI shows yellow <code>OutOfSync</code> or red <code>Degraded</code> state; commits not reflecting</td>
+                <td>Run <code>argocd app get &lt;app-name&gt;</code>; inspect diff: <code>argocd app diff &lt;app-name&gt;</code></td>
+                <td>Force hard refresh and sync: <code>argocd app sync &lt;app-name&gt; --force --prune</code>. Inspect webhook events in GitLab.</td>
+                <td>Verify GitLab Push Webhook reaches Argo CD (<code>https://&lt;mgmt-ip&gt;:30443/api/webhook</code>); ensure mutual branch protection.</td>
               </tr>
             </tbody>
           </table>
