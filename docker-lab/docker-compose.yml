@@ -1,22 +1,19 @@
 # docker-lab/docker-compose.yml
 # Master Docker Compose Specification for On-Premises DevOps Platform (Layer 1 Lab)
+# Configured with latest versions and multi-arch (arm64 & amd64) support.
 #
 # Profiles available:
 #   core       - GitLab, Jenkins, Nexus, Garage (S3), PostgreSQL, Redis (~6-8 GB RAM)
 #   quality    - SonarQube + PostgreSQL (~2-3 GB RAM)
 #   monitoring - Prometheus, Grafana, Loki, Promtail (~1-2 GB RAM)
 #   all        - Complete Layer 1 external stack (~10-12 GB RAM)
-#
-# Usage:
-#   docker compose --profile core up -d
-#   docker compose --profile all up -d
 
 services:
   # ==========================================================================
   # Layer 1B: External Stateful Databases & Cache (Outside K8s)
   # ==========================================================================
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     container_name: devops-postgres
     restart: unless-stopped
     profiles: [core, quality, all]
@@ -42,7 +39,7 @@ services:
           memory: 1024M
 
   redis:
-    image: redis:7.4-alpine
+    image: ${REDIS_IMAGE:-redis:alpine}
     container_name: devops-redis
     restart: unless-stopped
     profiles: [core, all]
@@ -64,7 +61,7 @@ services:
   # Layer 1A: DevOps Core Infrastructure (Outside K8s)
   # ==========================================================================
   gitlab:
-    image: gitlab/gitlab-ce:17.7.1-ce.0
+    image: ${GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
     container_name: devops-gitlab
     restart: unless-stopped
     profiles: [core, all]
@@ -97,7 +94,7 @@ services:
           memory: 2048M
 
   jenkins:
-    image: jenkins/jenkins:2.479.3-lts-jdk21
+    image: ${JENKINS_IMAGE:-jenkins/jenkins:lts-jdk21}
     container_name: devops-jenkins
     restart: unless-stopped
     profiles: [core, all]
@@ -124,7 +121,7 @@ services:
           memory: 2048M
 
   nexus:
-    image: sonatype/nexus3:3.75.1
+    image: ${NEXUS_IMAGE:-sonatype/nexus3:latest}
     container_name: devops-nexus
     restart: unless-stopped
     profiles: [core, all]
@@ -150,7 +147,7 @@ services:
           memory: 2560M
 
   garage:
-    image: dxflrs/garage:v1.1.0
+    image: ${GARAGE_IMAGE:-dxflrs/garage:v1.1.0}
     container_name: devops-garage
     restart: unless-stopped
     profiles: [core, all]
@@ -178,7 +175,7 @@ services:
   # Layer 1C: Code Quality (SonarQube)
   # ==========================================================================
   sonarqube:
-    image: sonarqube:lts-community
+    image: ${SONARQUBE_IMAGE:-sonarqube:community}
     container_name: devops-sonarqube
     restart: unless-stopped
     profiles: [quality, all]
@@ -212,7 +209,7 @@ services:
   # Layer 1D: Independent Observability & Centralized Logging Stack
   # ==========================================================================
   prometheus:
-    image: prom/prometheus:v2.53.3
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
     container_name: devops-prometheus
     restart: unless-stopped
     profiles: [monitoring, all]
@@ -233,7 +230,7 @@ services:
           memory: 1024M
 
   grafana:
-    image: grafana/grafana-oss:11.4.0
+    image: ${GRAFANA_IMAGE:-grafana/grafana-oss:latest}
     container_name: devops-grafana
     restart: unless-stopped
     profiles: [monitoring, all]
@@ -252,7 +249,7 @@ services:
           memory: 512M
 
   loki:
-    image: grafana/loki:3.3.2
+    image: ${LOKI_IMAGE:-grafana/loki:latest}
     container_name: devops-loki
     restart: unless-stopped
     profiles: [monitoring, all]
@@ -270,7 +267,7 @@ services:
           memory: 1024M
 
   promtail:
-    image: grafana/promtail:3.3.2
+    image: ${PROMTAIL_IMAGE:-grafana/promtail:latest}
     container_name: devops-promtail
     restart: unless-stopped
     profiles: [monitoring, all]
