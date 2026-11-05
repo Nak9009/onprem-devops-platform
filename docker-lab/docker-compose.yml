@@ -1,0 +1,306 @@
+# docker-lab/docker-compose.yml
+# Master Docker Compose Specification for On-Premises DevOps Platform (Layer 1 Lab)
+#
+# Profiles available:
+#   core       - GitLab, Jenkins, Nexus, Garage (S3), PostgreSQL, Redis (~6-8 GB RAM)
+#   quality    - SonarQube + PostgreSQL (~2-3 GB RAM)
+#   monitoring - Prometheus, Grafana, Loki, Promtail (~1-2 GB RAM)
+#   all        - Complete Layer 1 external stack (~10-12 GB RAM)
+#
+# Usage:
+#   docker compose --profile core up -d
+#   docker compose --profile all up -d
+
+services:
+  # ==========================================================================
+  # Layer 1B: External Stateful Databases & Cache (Outside K8s)
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: devops-postgres
+    restart: unless-stopped
+    profiles: [core, quality, all]
+    networks:
+      - devops-net
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMePostgres123!}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${POSTGRES_HOST_PORT:-5435}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: devops-redis
+    restart: unless-stopped
+    profiles: [core, all]
+    networks:
+      - devops-net
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${REDIS_HOST_PORT:-6381}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ==========================================================================
+  # Layer 1A: DevOps Core Infrastructure (Outside K8s)
+  # ==========================================================================
+  gitlab:
+    image: gitlab/gitlab-ce:17.7.1-ce.0
+    container_name: devops-gitlab
+    restart: unless-stopped
+    profiles: [core, all]
+    networks:
+      - devops-net
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://${DOMAIN:-devops.local}:${GITLAB_HTTP_PORT:-8082}'
+        gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD:-ChangeMeGitlab123!}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2222}
+        # Resource optimization for lab environment
+        puma['worker_processes'] = 2
+        puma['min_threads'] = 1
+        puma['max_threads'] = 4
+        sidekiq['max_concurrency'] = 10
+        postgresql['shared_buffers'] = '256MB'
+        prometheus_monitoring['enable'] = false
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${GITLAB_HTTP_PORT:-8082}:80"
+      - "${HOST_IP:-127.0.0.1}:${GITLAB_SSH_PORT:-2222}:22"
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 2048M
+
+  jenkins:
+    image: jenkins/jenkins:2.479.3-lts-jdk21
+    container_name: devops-jenkins
+    restart: unless-stopped
+    profiles: [core, all]
+    user: root
+    networks:
+      - devops-net
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true -Xms512m -Xmx1536m
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${JENKINS_HTTP_PORT:-8080}:8080"
+      - "${HOST_IP:-127.0.0.1}:${JENKINS_AGENT_PORT:-50000}:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/login || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+
+  nexus:
+    image: sonatype/nexus3:3.75.1
+    container_name: devops-nexus
+    restart: unless-stopped
+    profiles: [core, all]
+    networks:
+      - devops-net
+    environment:
+      - INSTALL4J_ADD_VM_PARAMS=-Xms1200m -Xmx1200m -XX:MaxDirectMemorySize=1G
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${NEXUS_HTTP_PORT:-8085}:8081"
+      - "${HOST_IP:-127.0.0.1}:${NEXUS_DOCKER_HOSTED_PORT:-5002}:5000"
+      - "${HOST_IP:-127.0.0.1}:${NEXUS_DOCKER_GROUP_PORT:-5003}:5001"
+    volumes:
+      - nexus_data:/nexus-data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/service/rest/v1/status || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2560M
+
+  garage:
+    image: dxflrs/garage:v1.1.0
+    container_name: devops-garage
+    restart: unless-stopped
+    profiles: [core, all]
+    networks:
+      - devops-net
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${GARAGE_S3_API_PORT:-3900}:3900"
+      - "${HOST_IP:-127.0.0.1}:${GARAGE_WEB_PORT:-3902}:3902"
+      - "${HOST_IP:-127.0.0.1}:${GARAGE_ADMIN_PORT:-3903}:3903"
+    volumes:
+      - ./configs/garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ==========================================================================
+  # Layer 1C: Code Quality (SonarQube)
+  # ==========================================================================
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: devops-sonarqube
+    restart: unless-stopped
+    profiles: [quality, all]
+    networks:
+      - devops-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - SONAR_JDBC_USERNAME=${POSTGRES_USER:-postgres}
+      - SONAR_JDBC_PASSWORD=${POSTGRES_PASSWORD:-ChangeMePostgres123!}
+      - SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/sonar
+      - SONAR_SEARCH_JAVAADDITIONALOPTS=-Dnode.store.allow_mmap=false
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${SONAR_HTTP_PORT:-9002}:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/api/system/status || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+
+  # ==========================================================================
+  # Layer 1D: Independent Observability & Centralized Logging Stack
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.53.3
+    container_name: devops-prometheus
+    restart: unless-stopped
+    profiles: [monitoring, all]
+    networks:
+      - devops-net
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    container_name: devops-grafana
+    restart: unless-stopped
+    profiles: [monitoring, all]
+    networks:
+      - devops-net
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-ChangeMeGrafana123!}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: devops-loki
+    restart: unless-stopped
+    profiles: [monitoring, all]
+    networks:
+      - devops-net
+    command: -config.file=/etc/loki/loki.yml
+    ports:
+      - "${HOST_IP:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./configs/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: devops-promtail
+    restart: unless-stopped
+    profiles: [monitoring, all]
+    networks:
+      - devops-net
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./configs/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  devops-net:
+    name: devops-net
+    driver: bridge
+
+volumes:
+  postgres_data:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  jenkins_home:
+  nexus_data:
+  garage_meta:
+  garage_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  prometheus_data:
+  grafana_data:
+  loki_data:

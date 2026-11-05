@@ -1,0 +1,29 @@
+# docker-lab/kind-mgmt-cluster.yaml
+# Layer 2: Dedicated Kubernetes Management Cluster Configuration (KinD)
+# Hosts Rancher (v2.10.1) & Argo CD (v2.13.2)
+#
+# IMPORTANT: This cluster NEVER hosts business applications.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: onprem-mgmt-k8s
+networking:
+  ipFamily: ipv4
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 6443
+  podSubnet: "10.243.0.0/16"
+  serviceSubnet: "10.95.0.0/16"
+
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.4
+    extraPortMappings:
+      # Argo CD Web UI & API NodePort
+      - containerPort: 30443
+        hostPort: 30443
+        protocol: TCP
+      # Rancher Web UI NodePort
+      - containerPort: 30444
+        hostPort: 30444
+        protocol: TCP
+

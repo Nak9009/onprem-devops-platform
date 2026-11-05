@@ -1,0 +1,26 @@
+# docker-lab/configs/prometheus/prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: "docker-lab"
+    platform: "onprem-devops-platform"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "garage"
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["garage:3903"]
+
+  - job_name: "loki"
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres:5432"]
