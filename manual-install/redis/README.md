@@ -7,6 +7,38 @@
 
 ---
 
+## 0. Automated Install (`install.sh`) — Read This First
+
+The script picks its mode from the host IP:
+
+| Mode | When | Result |
+|---|---|---|
+| **Sentinel HA** | host IP is `REDIS_IP` / `REDIS02_IP` / `REDIS03_IP` | node 1 = master, nodes 2–3 = replicas, a Sentinel on every node (quorum 2) |
+| **Standalone** | `REDIS02_IP`/`REDIS03_IP` unset (local lab) | single Redis, Sentinel disabled |
+
+```bash
+# On prod-redis-01, 02 and 03 (start with node 1):
+sudo PLATFORM_ENV=production REDIS_PASS='<16+ chars>' ./install.sh
+```
+
+- Redis and Sentinel bind to `127.0.0.1` + the node IP (not `0.0.0.0`). Firewall: peers on 6379/26379, `REDIS_CLIENT_CIDR` (default: node `/16`) for clients, `MONITOR_IP` for the exporter.
+- `masterauth`, Sentinel `auth-pass`/`requirepass` and the exporter password all use `REDIS_PASS`. The exporter now authenticates correctly.
+- `REDIS_MAXMEMORY_POLICY` defaults to `allkeys-lru` (cache). **Use `noeviction` or `volatile-lru` if Redis holds queues or sessions**, or Redis will silently evict them.
+- Applications must use a **Sentinel-aware client** (master name `mymaster`, Sentinels on `:26379` of all 3 nodes).
+- Don't re-run the script on a live HA node after a failover: Sentinel rewrites `redis.conf` and the script would reset the node's role.
+- Production refuses `ChangeMe_*` or short passwords.
+
+**Verify:**
+```bash
+redis-cli -p 26379 -a "$REDIS_PASS" sentinel get-master-addr-by-name mymaster
+redis-cli -a "$REDIS_PASS" info replication     # role + connected_slaves
+```
+**Rehearse:** stop `redis-server` on the master and confirm a replica is promoted within ~10–15 s, then bring the old master back and check it rejoins as a replica.
+
+> The manual steps below are the single-node reference. For HA, the script is authoritative.
+
+---
+
 ## 1. Install Redis Server, Sentinel & Prometheus Exporter
 
 ```bash
