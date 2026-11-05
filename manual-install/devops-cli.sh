@@ -219,7 +219,7 @@ cmd_status() {
   check_http "Prometheus"         "http://${MONITOR_IP}:9090/-/healthy"             "devops-monitor"
   check_http "Grafana"            "http://${MONITOR_IP}:3000/api/health"            "devops-monitor"
   check_http "Grafana Loki"       "http://${MONITOR_IP}:3100/ready"                 "devops-monitor"
-  check_http "HashiCorp Vault"    "http://${VAULT_IP}:8200/v1/sys/health"           "devops-monitor"
+  check_http "HashiCorp Vault"    "https://${VAULT_IP}:8200/v1/sys/health"           "devops-monitor"
   echo
   echo "=== Layer 2: Dedicated Kubernetes Management Cluster ==="
   check_tcp  "Mgmt K8s API"       "${K8S_MGMT_CP01_IP}" "6443"                      "k8s-mgmt-cp01"

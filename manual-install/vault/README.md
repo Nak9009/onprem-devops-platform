@@ -7,79 +7,47 @@
 
 ---
 
-## 1. Install HashiCorp Vault (`1.18.3`) Binary & System User
+## 1. Automated Install (`install.sh`)
+
+The script installs Vault with **TLS**, **integrated Raft storage** and a firewall limited to your client network. The release zip is verified against HashiCorp's `SHA256SUMS`.
 
 ```bash
-VAULT_VER="1.18.3"
-ARCH=$(dpkg --print-architecture) # amd64 or arm64
+sudo ./install.sh                                   # single node, self-generated CA (lab / first node)
 
-sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unzip curl
+# 3-node production cluster (run on each node, listing the OTHER nodes):
+sudo VAULT_PEERS="10.20.10.17,10.20.10.18" ./install.sh
 
-sudo groupadd --system vault || true
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin -g vault vault || true
-sudo mkdir -p /etc/vault.d /var/lib/vault/data
+# Auto-unseal through a Transit seal on another Vault:
+sudo VAULT_TRANSIT_ADDR=https://vault-seal.internal:8200 VAULT_TRANSIT_TOKEN=... ./install.sh
 
-curl -fsSL "https://releases.hashicorp.com/vault/${VAULT_VER}/vault_${VAULT_VER}_linux_${ARCH}.zip" \
-  -o /tmp/vault.zip
-sudo unzip -o /tmp/vault.zip -d /usr/local/bin
-sudo chmod 0755 /usr/local/bin/vault
-sudo chown -R vault:vault /etc/vault.d /var/lib/vault
+# Bring your own certificate instead of the generated CA:
+sudo VAULT_TLS_CERT=/path/vault.crt VAULT_TLS_KEY=/path/vault.key VAULT_TLS_CA=/path/ca.crt ./install.sh
 ```
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `VAULT_PEERS` | Other Raft nodes (`retry_join`); enables clustering | none (single node) |
+| `VAULT_CLIENT_CIDR` | Networks allowed to reach `:8200` | node's `/16` |
+| `VAULT_TRANSIT_ADDR`, `VAULT_TRANSIT_TOKEN`, `VAULT_TRANSIT_KEY` | Auto-unseal via Transit | disabled |
+
+Files: `/etc/vault.d/vault.hcl`, TLS in `/etc/vault.d/tls/` (`ca.crt` must be given to every client), data in `/var/lib/vault/raft`. Raft storage needs swap disabled (done by `common/install.sh`), because `disable_mlock = true` is used.
+
+> **Production notes**
+> - Without Transit auto-unseal, every restart leaves Vault sealed until 3 key holders unseal it. The script warns about this.
+> - Keep the 5 unseal keys with **different people**, and revoke the root token after creating admin policies.
+> - A 3-node Raft cluster tolerates one node failure. A single node is a single point of failure for every secret.
+> - Take regular `vault operator raft snapshot save` backups, and **test a restore**.
 
 ---
 
-## 2. Configure `/etc/vault.d/vault.hcl` & Systemd Service
+## 2. After the First Start (once)
 
 ```bash
-sudo tee /etc/vault.d/vault.hcl >/dev/null <<'EOF'
-ui = true
-disable_mlock = true
-
-storage "file" {
-  path = "/var/lib/vault/data"
-}
-
-listener "tcp" {
-  address     = "0.0.0.0:8200"
-  tls_disable = 1
-}
-
-api_addr = "http://127.0.0.1:8200"
-EOF
-sudo chmod 0640 /etc/vault.d/vault.hcl
-sudo chown vault:vault /etc/vault.d/vault.hcl
-
-sudo tee /etc/systemd/system/vault.service >/dev/null <<'EOF'
-[Unit]
-Description=HashiCorp Vault Secret Management Server
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-User=vault
-Group=vault
-ProtectSystem=full
-ProtectHome=read-only
-PrivateTmp=yes
-PrivateDevices=yes
-CapabilityBoundingSet=CAP_SYSLOG CAP_IPC_LOCK
-AmbientCapabilities=CAP_IPC_LOCK
-NoNewPrivileges=yes
-ExecStart=/usr/local/bin/vault server -config=/etc/vault.d/vault.hcl
-ExecReload=/bin/kill --signal HUP $MAINPID
-KillMode=process
-KillSignal=SIGINT
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo ufw allow 8200/tcp comment 'HashiCorp Vault API/UI'
-sudo systemctl daemon-reload
-sudo systemctl enable --now vault
+export VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/etc/vault.d/tls/ca.crt
+vault operator init -key-shares=5 -key-threshold=3
+vault operator unseal            # x3 with distinct keys (not needed with auto-unseal)
+vault login <ROOT_TOKEN>
+vault audit enable file file_path=/var/log/vault/audit.log     # enable BEFORE storing secrets
 ```
 
 ---
@@ -87,7 +55,8 @@ sudo systemctl enable --now vault
 ## 3. HashiCorp `vault` CLI Reference
 
 ```bash
-export VAULT_ADDR="http://127.0.0.1:8200"
+export VAULT_ADDR="https://127.0.0.1:8200"
+export VAULT_CACERT="/etc/vault.d/tls/ca.crt"
 
 # 1. Check Vault server seal & initialization status
 vault status

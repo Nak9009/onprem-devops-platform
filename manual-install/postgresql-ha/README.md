@@ -14,6 +14,39 @@
 
 ---
 
+## 0. Automated Install (`install.sh`) — Read This First
+
+The script detects its role from the host IP (matching `PG_DB1..3_IP` / `PG_LB1..2_IP` in `platform.env`) or from `NODE_ROLE=db|lb` and `NODE_INDEX=1..3`.
+
+```bash
+# 1. On pg-db1, pg-db2 and pg-db3, at about the same time (etcd needs quorum to finish):
+sudo PLATFORM_ENV=production PGBR_S3=true \
+     PG_ADMIN_PASS='...' PG_REPL_PASS='...' ./install.sh
+# 2. Then on pg-lb1 and pg-lb2:
+sudo PLATFORM_ENV=production PG_VRRP_PASS='...' ./install.sh
+```
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `PGBR_S3=true` | pgBackRest repo on MinIO (`MINIO_VIP`, bucket `PGBR_S3_BUCKET`, default `pgbackrest`; create the bucket first). **Required in production**: a node-local repo breaks after failover. | `false` |
+| `PG_CLIENT_CIDR` | Networks allowed to connect to PostgreSQL / HAProxy | node's `/16` |
+| `PG_VRRP_PASS` | Keepalived VRRP password (first 8 chars used) | `ChangeMe_Vrrp26` |
+| `PG_VIP_PREFIX` | VIP prefix length | `24` |
+
+With `PLATFORM_ENV=production` the script refuses `ChangeMe_*` passwords and a local-only backup repo.
+
+**Verify after install:**
+```bash
+sudo patronictl -c /etc/patroni/config.yml list     # exactly one Leader, one Sync Standby, one Replica
+psql -h <PG_VIP> -p 5432 -U postgres -c "select pg_is_in_recovery()"   # f (primary)
+sudo -u postgres pgbackrest --stanza=main check
+```
+**Rehearse before go-live:** switchover (`patronictl switchover`), a hard stop of the leader's `patroni` service, and a full restore from the S3 repo.
+
+> The manual steps below are the reference for what the script automates. Where they differ from `install.sh` (for example the restricted `pg_hba`, per-peer firewall rules and `pg-db3` as the async node via `nosync: true`), the script is authoritative.
+
+---
+
 ## 1. Install PostgreSQL 16, Patroni, etcd, HAProxy, Keepalived & `pgBackRest`
 
 Run on **`pg-db1`, `pg-db2`, and `pg-db3`**:

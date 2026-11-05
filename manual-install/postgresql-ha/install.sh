@@ -304,6 +304,10 @@ EOF
 chown postgres:postgres /etc/pgbackrest/pgbackrest.conf
 chmod 0600 /etc/pgbackrest/pgbackrest.conf
 
+# pg-db3 is the asynchronous replica (never a synchronous standby), per README
+NOSYNC="false"
+[[ "${NODE_INDEX}" == "3" ]] && NOSYNC="true"
+
 echo "[4/6] Writing Patroni configuration (/etc/patroni/config.yml)..."
 cat >/etc/patroni/config.yml <<EOF
 scope: pg-ha-cluster
@@ -328,6 +332,7 @@ bootstrap:
     maximum_lag_on_failover: 1048576
     synchronous_mode: true
     synchronous_mode_strict: false
+    synchronous_node_count: 1
     postgresql:
       use_pg_rewind: true
       use_slots: true
@@ -375,7 +380,7 @@ tags:
   nofailover: false
   noloadbalance: false
   clonefrom: false
-  nosync: false
+  nosync: ${NOSYNC}
 EOF
 chown postgres:postgres /etc/patroni/config.yml
 chmod 0600 /etc/patroni/config.yml
