@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Rancher v2.10.1 + Rancher CLI v2.9.0 Installer (Ubuntu 24.04 LTS)
+# Rancher v2.10.1 + Rancher CLI v2.15.3 Installer (Ubuntu 24.04 LTS)
 # Supports two deployment modes automatically:
 #   1. Layer 2 Kubernetes Management Cluster Node (/etc/kubernetes/admin.conf exists):
-#      Deploys Rancher into namespace 'cattle-system' without touching containerd/Docker.
+#      Deploys a PLACEHOLDER nginx gateway (NOT Rancher) into namespace 'cattle-system'
+#      without touching containerd/Docker. Use Helm for a real Rancher on Kubernetes.
 #   2. Standalone Rancher VM (No local Kubernetes):
 #      Installs Docker CE 27.4.1 and runs rancher-container.service.
 # ==============================================================================
@@ -16,23 +17,37 @@ if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
   source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
 fi
 
+if [[ $EUID -ne 0 ]]; then
+  echo "ERROR: run as root (sudo ./install.sh)" >&2
+  exit 1
+fi
+command -v ufw >/dev/null 2>&1 || { echo "ERROR: ufw not found; run common/install.sh first" >&2; exit 1; }
+
 ARCH="$(dpkg --print-architecture)"
 RANCHER_VER="${RANCHER_VER:-v2.10.1}"
 RANCHER_CLI_VER="${RANCHER_CLI_VER:-v2.15.3}"
 RANCHER_BOOTSTRAP_PASS="${RANCHER_BOOTSTRAP_PASS:-ChangeMe_RancherBootstrap_2026!}"
+if [[ "${PLATFORM_ENV:-}" == "production" && "${RANCHER_BOOTSTRAP_PASS}" == ChangeMe_* ]]; then
+  echo "ERROR: set a real RANCHER_BOOTSTRAP_PASS before a production install" >&2
+  exit 1
+fi
 TOTAL_MEM_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
 
 echo "[1/3] Installing Rancher CLI (${RANCHER_CLI_VER})..."
+CLI_TMP="$(mktemp -d)"
+trap 'rm -rf "${CLI_TMP}"' EXIT
 curl -fsSL "https://github.com/rancher/cli/releases/download/${RANCHER_CLI_VER}/rancher-linux-${ARCH}-${RANCHER_CLI_VER}.tar.gz" \
-  -o /tmp/rancher-cli.tar.gz
-tar -xzf /tmp/rancher-cli.tar.gz -C /tmp
-mv "/tmp/rancher-${RANCHER_CLI_VER}/rancher" /usr/local/bin/rancher
-chmod 0755 /usr/local/bin/rancher
+  -o "${CLI_TMP}/rancher-cli.tar.gz"
+tar -xzf "${CLI_TMP}/rancher-cli.tar.gz" -C "${CLI_TMP}" --strip-components=1
+install -m 0755 "${CLI_TMP}/rancher" /usr/local/bin/rancher
 
 ufw allow 80/tcp comment 'Rancher HTTP'
 ufw allow 443/tcp comment 'Rancher HTTPS'
 
 if [[ -f /etc/kubernetes/admin.conf ]]; then
+  for bin in kubectl openssl; do
+    command -v "${bin}" >/dev/null 2>&1 || { echo "ERROR: ${bin} not found" >&2; exit 1; }
+  done
   echo "[2/3] Detected Layer 2 Management Kubernetes Cluster on $(hostname -s) (RAM: ${TOTAL_MEM_MB} MB)..."
   export KUBECONFIG=/etc/kubernetes/admin.conf
   kubectl create namespace cattle-system --dry-run=client -o yaml | kubectl apply -f -
@@ -156,6 +171,9 @@ EOF
   apt-mark hold docker-ce docker-ce-cli
 
   mkdir -p /var/lib/rancher /var/log/rancher/auditlog
+  umask 077
+  printf 'CATTLE_BOOTSTRAP_PASSWORD=%s\n' "${RANCHER_BOOTSTRAP_PASS}" >/etc/rancher-container.env
+  umask 022
   cat >/etc/systemd/system/rancher-container.service <<EOF
 [Unit]
 Description=Rancher Multi-Cluster Management Server Container
@@ -166,6 +184,7 @@ Requires=docker.service
 Type=simple
 Restart=always
 RestartSec=10
+EnvironmentFile=/etc/rancher-container.env
 ExecStartPre=-/usr/bin/docker rm -f rancher-server
 ExecStart=/usr/bin/docker run --name rancher-server \\
   --privileged \\
@@ -173,7 +192,7 @@ ExecStart=/usr/bin/docker run --name rancher-server \\
   -v /var/lib/rancher:/var/lib/rancher \\
   -v /var/log/rancher/auditlog:/var/log/auditlog \\
   -e AUDIT_LEVEL=1 \\
-  -e CATTLE_BOOTSTRAP_PASSWORD=${RANCHER_BOOTSTRAP_PASS} \\
+  -e CATTLE_BOOTSTRAP_PASSWORD \\
   rancher/rancher:${RANCHER_VER}
 ExecStop=/usr/bin/docker stop rancher-server
 
@@ -186,7 +205,15 @@ EOF
 fi
 
 echo "[3/3] Verifying Rancher HTTPS /ping endpoint and CLI..."
-sleep 2
-curl -sk https://127.0.0.1/ping
+ok=0
+for i in $(seq 1 60); do
+  if curl -fsk https://127.0.0.1/ping >/dev/null 2>&1; then ok=1; break; fi
+  sleep 5
+done
+if [[ ${ok} -ne 1 ]]; then
+  echo "ERROR: Rancher /ping not healthy after 300s" >&2
+  exit 1
+fi
+echo "Rancher /ping OK"
 rancher --version
 echo "Rancher Server and CLI installation complete."
