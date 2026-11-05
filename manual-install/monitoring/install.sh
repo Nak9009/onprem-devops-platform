@@ -8,26 +8,43 @@ set -euo pipefail
 # Load global platform.env if present
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  # shellcheck disable=SC1090
   source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
 fi
 
+if [[ $EUID -ne 0 ]]; then
+  echo "ERROR: run as root (sudo ./install.sh)" >&2
+  exit 1
+fi
+
 ARCH="$(dpkg --print-architecture)"
+NODE_IP="${NODE_IP:-$(hostname -I | awk '{print $1}')}"
+CLIENT_CIDR="${CLIENT_CIDR:-$(echo "${NODE_IP}" | awk -F. '{print $1"."$2".0.0/16"}')}"
 PROM_VER="${PROM_VER:-2.53.3}"
 GRAFANA_VER="${GRAFANA_VER:-11.4.0}"
 GRAFANA_PASS="${GRAFANA_PASS:-ChangeMe_GrafanaAdmin_2026!}"
+
+if [[ "${PLATFORM_ENV:-}" == "production" && "${GRAFANA_PASS}" == ChangeMe_* ]]; then
+  echo "ERROR: set a real GRAFANA_PASS before a production install" >&2
+  exit 1
+fi
 
 echo "[1/3] Installing Prometheus ${PROM_VER} and promtool CLI..."
 groupadd --system prometheus 2>/dev/null || true
 useradd --system --no-create-home --shell /usr/sbin/nologin -g prometheus prometheus 2>/dev/null || true
 mkdir -p /etc/prometheus/rules /var/lib/prometheus
 
-curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${PROM_VER}/prometheus-${PROM_VER}.linux-${ARCH}.tar.gz" \
-  -o /tmp/prometheus.tar.gz
-tar -xzf /tmp/prometheus.tar.gz -C /tmp
-cp "/tmp/prometheus-${PROM_VER}.linux-${ARCH}/prometheus" /usr/local/bin/
-cp "/tmp/prometheus-${PROM_VER}.linux-${ARCH}/promtool" /usr/local/bin/
-chown prometheus:prometheus /usr/local/bin/prometheus /usr/local/bin/promtool
-chmod 0755 /usr/local/bin/prometheus /usr/local/bin/promtool
+PROM_TMP="$(mktemp -d)"
+trap 'rm -rf "${PROM_TMP}"' EXIT
+PROM_BASE="https://github.com/prometheus/prometheus/releases/download/v${PROM_VER}"
+PROM_TAR="prometheus-${PROM_VER}.linux-${ARCH}.tar.gz"
+curl -fsSL "${PROM_BASE}/${PROM_TAR}" -o "${PROM_TMP}/${PROM_TAR}"
+if curl -fsSL "${PROM_BASE}/sha256sums.txt" -o "${PROM_TMP}/sha256sums.txt" 2>/dev/null; then
+  (cd "${PROM_TMP}" && grep " ${PROM_TAR}\$" sha256sums.txt | sha256sum -c -)
+fi
+tar -xzf "${PROM_TMP}/${PROM_TAR}" -C "${PROM_TMP}"
+install -m 0755 -o prometheus -g prometheus "${PROM_TMP}/prometheus-${PROM_VER}.linux-${ARCH}/prometheus" /usr/local/bin/prometheus
+install -m 0755 -o prometheus -g prometheus "${PROM_TMP}/prometheus-${PROM_VER}.linux-${ARCH}/promtool" /usr/local/bin/promtool
 
 cat >/etc/prometheus/rules/alert.rules.yml <<'EOF'
 groups:
@@ -42,7 +59,36 @@ groups:
           summary: "Node or target {{ $labels.instance }} is down"
 EOF
 
-cat >/etc/prometheus/prometheus.yml <<'EOF'
+# Build node_exporter target list from platform.env IPs (deduplicated)
+declare -A SEEN_IPS=()
+NODE_TARGETS=("'127.0.0.1:9100'")
+SEEN_IPS["127.0.0.1"]=1
+SEEN_IPS["${NODE_IP}"]=1
+for ip_var in GITLAB_IP JENKINS_IP JENKINS_AGENT01_IP JENKINS_AGENT02_IP NEXUS_IP \
+              PG_LB1_IP PG_LB2_IP PG_DB1_IP PG_DB2_IP PG_DB3_IP REDIS_IP REDIS02_IP REDIS03_IP \
+              MINIO01_IP MINIO02_IP MINIO03_IP MINIO04_IP VAULT_IP \
+              K8S_MGMT_CP01_IP K8S_MGMT_CP02_IP K8S_MGMT_CP03_IP \
+              K8S_APP_CP01_IP K8S_APP_CP02_IP K8S_APP_CP03_IP \
+              K8S_APP_WORKER01_IP K8S_APP_WORKER02_IP K8S_APP_WORKER03_IP; do
+  ip="${!ip_var:-}"
+  if [[ -n "${ip}" && -z "${SEEN_IPS[${ip}]:-}" ]]; then
+    SEEN_IPS["${ip}"]=1
+    NODE_TARGETS+=("'${ip}:9100'")
+  fi
+done
+TARGETS_CSV="$(IFS=,; echo "${NODE_TARGETS[*]}")"
+
+PG_TARGETS=""
+for ip in "${PG_DB1_IP:-}" "${PG_DB2_IP:-}" "${PG_DB3_IP:-}"; do
+  [[ -n "${ip}" ]] && PG_TARGETS+="${PG_TARGETS:+,}'${ip}:9187'"
+done
+
+REDIS_TARGETS=""
+for ip in "${REDIS_IP:-}" "${REDIS02_IP:-}" "${REDIS03_IP:-}"; do
+  [[ -n "${ip}" ]] && REDIS_TARGETS+="${REDIS_TARGETS:+,}'${ip}:9121'"
+done
+
+cat >/etc/prometheus/prometheus.yml <<EOF
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -56,8 +102,23 @@ scrape_configs:
       - targets: ['127.0.0.1:9090']
   - job_name: 'node_exporter'
     static_configs:
-      - targets: ['127.0.0.1:9100']
+      - targets: [${TARGETS_CSV}]
 EOF
+
+if [[ -n "${PG_TARGETS}" ]]; then
+  cat >>/etc/prometheus/prometheus.yml <<EOF
+  - job_name: 'postgres_exporter'
+    static_configs:
+      - targets: [${PG_TARGETS}]
+EOF
+fi
+if [[ -n "${REDIS_TARGETS}" ]]; then
+  cat >>/etc/prometheus/prometheus.yml <<EOF
+  - job_name: 'redis_exporter'
+    static_configs:
+      - targets: [${REDIS_TARGETS}]
+EOF
+fi
 
 chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
 promtool check config /etc/prometheus/prometheus.yml
@@ -77,8 +138,7 @@ ExecStart=/usr/local/bin/prometheus \
   --storage.tsdb.path=/var/lib/prometheus \
   --storage.tsdb.retention.time=15d \
   --web.listen-address=0.0.0.0:9090 \
-  --web.enable-lifecycle \
-  --web.enable-admin-api
+  --web.enable-lifecycle
 Restart=always
 RestartSec=5
 
@@ -86,9 +146,10 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-ufw allow 9090/tcp comment 'Prometheus Web UI'
+ufw allow from "${CLIENT_CIDR}" to any port 9090 proto tcp comment 'Prometheus Web UI'
 systemctl daemon-reload
-systemctl enable --now prometheus
+systemctl enable prometheus
+systemctl restart prometheus
 
 echo "[2/3] Installing Grafana ${GRAFANA_VER} and grafana-cli..."
 mkdir -p /etc/apt/keyrings
@@ -121,6 +182,8 @@ cookie_secure = false
 [users]
 allow_sign_up = false
 EOF
+chown root:grafana /etc/grafana/grafana.ini
+chmod 0640 /etc/grafana/grafana.ini
 
 cat >/etc/grafana/provisioning/datasources/datasources.yml <<'EOF'
 apiVersion: 1
@@ -141,13 +204,18 @@ datasources:
     editable: false
 EOF
 
-ufw allow 3000/tcp comment 'Grafana Web UI'
+ufw allow from "${CLIENT_CIDR}" to any port 3000 proto tcp comment 'Grafana Web UI'
 systemctl daemon-reload
-systemctl enable --now grafana-server
+systemctl enable grafana-server
+systemctl restart grafana-server
 
 echo "[3/3] Verifying Prometheus and Grafana..."
-sleep 3
-curl -fsS http://127.0.0.1:9090/-/healthy && echo
-curl -fsS http://127.0.0.1:3000/api/health && echo
+for url in "http://127.0.0.1:9090/-/healthy" "http://127.0.0.1:3000/api/health"; do
+  ok=0
+  for _ in $(seq 1 20); do
+    if curl -fsS "${url}" >/dev/null 2>&1; then ok=1; break; fi
+    sleep 2
+  done
+  [[ ${ok} -eq 1 ]] || { echo "ERROR: ${url} did not become healthy" >&2; exit 1; }
+done
 echo "Prometheus and Grafana installation complete."
-

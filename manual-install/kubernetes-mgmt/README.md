@@ -9,7 +9,7 @@
 
 ## 1. Initialize Layer 2 Management Cluster (`Pod CIDR 10.243.0.0/16`)
 
-Run [`manual-install/kubernetes-mgmt/install.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/kubernetes-mgmt/install.sh) to deploy `containerd`, `kubeadm` (`1.31.4-1.1`), Calico (`v3.29.1`), and **Argo CD (`v2.13.2`)** with non-overlapping Management Cluster CIDRs (`10.243.0.0/16` Pod CIDR and `10.95.0.0/12` Service CIDR).
+Run [`manual-install/kubernetes-mgmt/install.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/kubernetes-mgmt/install.sh) to deploy `containerd`, `kubeadm` (`1.31.4-1.1`), Calico (`v3.29.1`), and **Argo CD (`v2.13.2`)** with non-overlapping Management Cluster CIDRs (`10.243.0.0/16` Pod CIDR and `10.95.0.0/16` Service CIDR).
 
 ---
 

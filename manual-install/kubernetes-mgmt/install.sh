@@ -12,7 +12,7 @@ if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
 fi
 
 export POD_CIDR="${MGMT_POD_CIDR:-10.243.0.0/16}"
-export SVC_CIDR="${MGMT_SVC_CIDR:-10.95.0.0/12}"
+export SVC_CIDR="${MGMT_SVC_CIDR:-10.95.0.0/16}"
 export ALLOW_WORKLOADS_ON_CP="true"
 export INSTALL_ARGOCD="true"
 

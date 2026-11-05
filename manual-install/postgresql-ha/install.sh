@@ -272,16 +272,19 @@ ETCDCTL_API=3 etcdctl --endpoints="http://${PG_DB1_IP}:2379,http://${PG_DB2_IP}:
 echo "[3/6] Writing pgBackRest configuration..."
 if [[ "${PGBR_S3}" == "true" ]]; then
   : "${MINIO_VIP:?MINIO_VIP not set}"
-  : "${MINIO_ROOT_USER:?MINIO_ROOT_USER not set}"
-  : "${MINIO_ROOT_PASS:?MINIO_ROOT_PASS not set}"
+  S3_KEY="${S3_PGBACKREST_ACCESS_KEY:-${MINIO_ROOT_USER:-}}"
+  S3_SECRET="${S3_PGBACKREST_SECRET_KEY:-${MINIO_ROOT_PASS:-}}"
+  : "${S3_KEY:?Set S3_PGBACKREST_ACCESS_KEY (from /root/garage-s3-credentials.env on Garage node 1)}"
+  : "${S3_SECRET:?Set S3_PGBACKREST_SECRET_KEY (from /root/garage-s3-credentials.env on Garage node 1)}"
   PGBR_REPO="repo1-type=s3
-repo1-s3-endpoint=${MINIO_VIP}:9000
+repo1-s3-endpoint=${MINIO_VIP}
+repo1-storage-port=${GARAGE_TLS_PORT:-9443}
 repo1-s3-bucket=${PGBR_S3_BUCKET}
-repo1-s3-region=us-east-1
-repo1-s3-key=${MINIO_ROOT_USER}
-repo1-s3-key-secret=${MINIO_ROOT_PASS}
+repo1-s3-region=${PGBR_S3_REGION:-garage}
+repo1-s3-key=${S3_KEY}
+repo1-s3-key-secret=${S3_SECRET}
 repo1-s3-uri-style=path
-repo1-storage-verify-tls=n
+repo1-storage-verify-tls=${PGBR_VERIFY_TLS:-n}
 repo1-path=/pgbackrest"
 else
   echo "WARN: PGBR_S3!=true; using a node-local repo (lab only: not valid after failover)" >&2

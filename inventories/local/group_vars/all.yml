@@ -62,7 +62,7 @@ vault_version: "1.18.3"
 # Layer 2: Management Kubernetes Cluster Networking
 mgmt_cluster_name: "onprem-local-mgmt-k8s"
 mgmt_pod_cidr: "10.243.0.0/16"
-mgmt_service_cidr: "10.95.0.0/12"
+mgmt_service_cidr: "10.95.0.0/16"
 
 # Layer 3: Application Kubernetes Cluster Networking
 cluster_name: "onprem-local-app-k8s"

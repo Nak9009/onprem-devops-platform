@@ -9,7 +9,7 @@
   gather_facts: true
   vars:
     pod_cidr: "{{ mgmt_pod_cidr | default('10.243.0.0/16') }}"
-    service_cidr: "{{ mgmt_service_cidr | default('10.95.0.0/12') }}"
+    service_cidr: "{{ mgmt_service_cidr | default('10.95.0.0/16') }}"
     cluster_name: "{{ mgmt_cluster_name | default('onprem-mgmt-k8s') }}"
     k8s_single_node_allow_workloads: true
   pre_tasks:

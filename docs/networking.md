@@ -18,7 +18,7 @@
 | **VLAN 80** | `Backup-Net` | `10.20.80.0/24` | `10.20.80.1` | `prod-backup-01` (`10.20.80.10` — `pgBackRest` repository, platform archives) |
 
 ### Kubernetes Internal Overlay CIDRs (Non-Overlapping)
-- **Management Cluster (`VLAN 30`):** Pod CIDR `10.243.0.0/16`, Service CIDR `10.95.0.0/12`
+- **Management Cluster (`VLAN 30`):** Pod CIDR `10.243.0.0/16`, Service CIDR `10.95.0.0/16`
 - **Application Cluster (`VLAN 40`):** Pod CIDR `10.244.0.0/16`, Service CIDR `10.96.0.0/12`
 
 ---

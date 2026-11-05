@@ -185,8 +185,10 @@ cmd_install_clis() {
   # rancher CLI
   curl -fsSL "https://github.com/rancher/cli/releases/download/${RANCHER_CLI_VER}/rancher-linux-${arch}-${RANCHER_CLI_VER}.tar.gz" -o /tmp/rancher.tar.gz
   tar -xzf /tmp/rancher.tar.gz -C /tmp && sudo mv "/tmp/rancher-${RANCHER_CLI_VER}/rancher" /usr/local/bin/rancher
-  # mc (MinIO Client)
-  sudo curl -fsSL "https://dl.min.io/client/mc/release/linux-${arch}/mc" -o /usr/local/bin/mc
+  # garage CLI (replaces discontinued MinIO mc binary)
+  local g_triple="x86_64-unknown-linux-musl"
+  [[ "${arch}" == "arm64" ]] && g_triple="aarch64-unknown-linux-musl"
+  sudo curl -fsSL "https://garagehq.deuxfleurs.fr/_releases/${GARAGE_VER:-v2.5.0}/${g_triple}/garage" -o /usr/local/bin/garage
   # logcli (Loki CLI)
   curl -fsSL "https://github.com/grafana/loki/releases/download/v${LOKI_VER}/logcli-linux-${arch}.zip" -o /tmp/logcli.zip
   sudo unzip -o /tmp/logcli.zip -d /tmp && sudo mv "/tmp/logcli-linux-${arch}" /usr/local/bin/logcli
@@ -201,7 +203,7 @@ cmd_install_clis() {
   sudo dpkg -i /tmp/glab.deb
 
   sudo chmod 0755 /usr/local/bin/kubectl /usr/local/bin/helm /usr/local/bin/argocd \
-    /usr/local/bin/calicoctl /usr/local/bin/rancher /usr/local/bin/mc \
+    /usr/local/bin/calicoctl /usr/local/bin/rancher /usr/local/bin/garage \
     /usr/local/bin/logcli /usr/local/bin/trivy /usr/local/bin/vault
   echo "[OK] All operator CLIs installed in /usr/local/bin."
 }
@@ -211,7 +213,7 @@ cmd_status() {
   check_http "GitLab CE"          "http://${GITLAB_IP}/-/readiness"                 "devops-gitlab"
   check_http "Jenkins LTS"        "http://${JENKINS_IP}:8080/login"                 "devops-jenkins"
   check_http "Sonatype Nexus"     "http://${NEXUS_IP}:8081/service/rest/v1/status"  "devops-nexus"
-  check_http "MinIO S3 API"       "http://${MINIO_VIP}:9000/minio/health/live"      "devops-nexus"
+  check_http "Garage S3 API"      "https://${MINIO_VIP}:${GARAGE_TLS_PORT:-9443}/health" "devops-nexus"
   check_tcp  "PostgreSQL RW VIP"  "${PG_VIP}" "5432"                                "pg-db1"
   check_tcp  "PostgreSQL RO VIP"  "${PG_VIP}" "5433"                                "pg-db1"
   check_http "Patroni pg-db1"     "http://${PG_DB1_IP}:8008/health"                 "pg-db1"
