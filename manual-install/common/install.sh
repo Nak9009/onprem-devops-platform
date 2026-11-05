@@ -8,7 +8,13 @@ set -euo pipefail
 # Load global platform.env if present
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}" ]]; then
+  # shellcheck disable=SC1090
   source "${PLATFORM_ENV_FILE:-${SCRIPT_DIR}/../platform.env}"
+fi
+
+if [[ $EUID -ne 0 ]]; then
+  echo "ERROR: run as root (sudo ./install.sh)" >&2
+  exit 1
 fi
 
 NODE_EXP_VER="${NODE_EXP_VER:-1.8.2}"
@@ -48,6 +54,12 @@ sysctl --system
 echo "[3/5] Enabling Chrony, SSH hardening, UFW, and auditd..."
 systemctl enable --now chrony
 
+# Refuse to disable password auth unless some account has an authorized key
+if ! compgen -G "/home/*/.ssh/authorized_keys" >/dev/null && [[ ! -s /root/.ssh/authorized_keys ]]; then
+  echo "ERROR: no SSH authorized_keys found; refusing to disable password auth (lockout risk)." >&2
+  exit 1
+fi
+
 cat >/etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
@@ -83,10 +95,15 @@ echo "[4/5] Installing Prometheus Node Exporter v${NODE_EXP_VER}..."
 groupadd --system node_exporter 2>/dev/null || true
 useradd --system --no-create-home --shell /usr/sbin/nologin -g node_exporter node_exporter 2>/dev/null || true
 
-curl -fsSL "https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXP_VER}/node_exporter-${NODE_EXP_VER}.linux-${ARCH}.tar.gz" \
-  -o /tmp/node_exporter.tar.gz
-tar -xzf /tmp/node_exporter.tar.gz -C /tmp
-cp "/tmp/node_exporter-${NODE_EXP_VER}.linux-${ARCH}/node_exporter" /usr/local/bin/node_exporter
+NE_TMP="$(mktemp -d)"
+trap 'rm -rf "${NE_TMP}"' EXIT
+NE_BASE="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXP_VER}"
+NE_TAR="node_exporter-${NODE_EXP_VER}.linux-${ARCH}.tar.gz"
+curl -fsSL "${NE_BASE}/${NE_TAR}" -o "${NE_TMP}/${NE_TAR}"
+curl -fsSL "${NE_BASE}/sha256sums.txt" -o "${NE_TMP}/sha256sums.txt"
+(cd "${NE_TMP}" && grep " ${NE_TAR}\$" sha256sums.txt | sha256sum -c -)
+tar -xzf "${NE_TMP}/${NE_TAR}" -C "${NE_TMP}"
+cp "${NE_TMP}/node_exporter-${NODE_EXP_VER}.linux-${ARCH}/node_exporter" /usr/local/bin/node_exporter
 chown node_exporter:node_exporter /usr/local/bin/node_exporter
 chmod 0755 /usr/local/bin/node_exporter
 
@@ -111,7 +128,12 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-ufw allow 9100/tcp comment 'Prometheus Node Exporter'
+if [[ -n "${MONITOR_IP:-}" ]]; then
+  ufw allow from "${MONITOR_IP}" to any port 9100 proto tcp comment 'Prometheus Node Exporter'
+else
+  echo "WARN: MONITOR_IP unset; opening 9100 to all" >&2
+  ufw allow 9100/tcp comment 'Prometheus Node Exporter'
+fi
 systemctl daemon-reload
 systemctl enable --now node_exporter
 

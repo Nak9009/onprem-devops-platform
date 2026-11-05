@@ -1,7 +1,7 @@
 # Rancher Server Manual Installation & CLI Guide (`rancher`)
 
 - **Target Host:** `devops-rancher` (`192.168.252.13`) or `prod-rancher-01` (`10.20.10.13`)
-- **Versions:** Docker CE `27.4.1`, Rancher Server `v2.10.1`, Rancher CLI `v2.9.0`
+- **Versions:** Docker CE `27.4.1`, Rancher Server `v2.10.1`, Rancher CLI `v2.15.3`
 - **Automated Script:** [`manual-install/rancher/install.sh`](file:///Users/ratanakieng/labs/onprem-devops-platform/manual-install/rancher/install.sh)
 
 ---

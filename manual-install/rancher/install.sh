@@ -3,8 +3,8 @@
 # Rancher v2.10.1 + Rancher CLI v2.15.3 Installer (Ubuntu 24.04 LTS)
 # Supports two deployment modes automatically:
 #   1. Layer 2 Kubernetes Management Cluster Node (/etc/kubernetes/admin.conf exists):
-#      Deploys a PLACEHOLDER nginx gateway (NOT Rancher) into namespace 'cattle-system'
-#      without touching containerd/Docker. Use Helm for a real Rancher on Kubernetes.
+#      Installs Rancher with Helm into 'cattle-system' (cert-manager self-signed TLS;
+#      ingress-nginx installed if no IngressClass exists). Needs kubectl + helm.
 #   2. Standalone Rancher VM (No local Kubernetes):
 #      Installs Docker CE 27.4.1 and runs rancher-container.service.
 # ==============================================================================
@@ -45,107 +45,52 @@ ufw allow 80/tcp comment 'Rancher HTTP'
 ufw allow 443/tcp comment 'Rancher HTTPS'
 
 if [[ -f /etc/kubernetes/admin.conf ]]; then
-  for bin in kubectl openssl; do
+  for bin in kubectl helm; do
     command -v "${bin}" >/dev/null 2>&1 || { echo "ERROR: ${bin} not found" >&2; exit 1; }
   done
-  echo "[2/3] Detected Layer 2 Management Kubernetes Cluster on $(hostname -s) (RAM: ${TOTAL_MEM_MB} MB)..."
+  echo "[2/3] Detected Layer 2 Management Kubernetes Cluster on $(hostname -s) (RAM: ${TOTAL_MEM_MB} MB) — installing Rancher ${RANCHER_VER} via Helm..."
   export KUBECONFIG=/etc/kubernetes/admin.conf
-  kubectl create namespace cattle-system --dry-run=client -o yaml | kubectl apply -f -
+  RANCHER_HOST="${RANCHER_HOST:-rancher.${DOMAIN:-devops.local}}"
+  CERT_MANAGER_VER="${CERT_MANAGER_VER:-v1.16.2}"
+  INGRESS_NGINX_CHART_VER="${INGRESS_NGINX_CHART_VER:-4.11.3}"
 
-  mkdir -p /etc/kubernetes/addons/rancher
-  if [[ ! -f /etc/kubernetes/addons/rancher/tls.crt ]]; then
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-      -keyout /etc/kubernetes/addons/rancher/tls.key \
-      -out /etc/kubernetes/addons/rancher/tls.crt \
-      -subj "/CN=rancher.${DOMAIN:-devops.local}/O=OnPrem-DevOps" >/dev/null 2>&1
+  helm repo add jetstack https://charts.jetstack.io --force-update
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
+  helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --force-update
+  helm repo update
+
+  # Ingress controller: install ingress-nginx (hostNetwork on 80/443) only if the cluster has none
+  if [[ -z "$(kubectl get ingressclass -o name 2>/dev/null)" ]]; then
+    echo "No IngressClass found; installing ingress-nginx ${INGRESS_NGINX_CHART_VER} (hostNetwork)..."
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+      --version "${INGRESS_NGINX_CHART_VER}" \
+      --namespace ingress-nginx --create-namespace \
+      --set controller.kind=DaemonSet \
+      --set controller.hostNetwork=true \
+      --set controller.dnsPolicy=ClusterFirstWithHostNet \
+      --set controller.service.type=ClusterIP \
+      --set controller.ingressClassResource.default=true \
+      --wait --timeout 5m
   fi
-  kubectl -n cattle-system create secret tls rancher-tls \
-    --cert=/etc/kubernetes/addons/rancher/tls.crt \
-    --key=/etc/kubernetes/addons/rancher/tls.key \
-    --dry-run=client -o yaml | kubectl apply -f -
 
-  cat >/etc/kubernetes/addons/rancher/rancher-mgmt.yaml <<'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: rancher-gateway-conf
-  namespace: cattle-system
-data:
-  nginx.conf: |
-    events { worker_connections 1024; }
-    http {
-      server {
-        listen 80;
-        location /ping { return 200 "pong\n"; add_header Content-Type text/plain; }
-        location / { return 301 https://$host$request_uri; }
-      }
-      server {
-        listen 443 ssl;
-        ssl_certificate /etc/rancher-tls/tls.crt;
-        ssl_certificate_key /etc/rancher-tls/tls.key;
-        location /ping { return 200 "pong\n"; add_header Content-Type text/plain; }
-        location /healthz { return 200 "ok\n"; add_header Content-Type text/plain; }
-        location / {
-          return 200 "Rancher Management Plane Active (cattle-system on Layer 2 Management Cluster)\n";
-          add_header Content-Type text/plain;
-        }
-      }
-    }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: rancher-server
-  namespace: cattle-system
-  labels:
-    app: rancher-server
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: rancher-server
-  template:
-    metadata:
-      labels:
-        app: rancher-server
-    spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
-      tolerations:
-        - operator: Exists
-      containers:
-        - name: rancher-gateway
-          image: nginx:1.27-alpine
-          ports:
-            - containerPort: 80
-              hostPort: 80
-            - containerPort: 443
-              hostPort: 443
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 128Mi
-          volumeMounts:
-            - name: conf
-              mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
-            - name: tls
-              mountPath: /etc/rancher-tls
-              readOnly: true
-      volumes:
-        - name: conf
-          configMap:
-            name: rancher-gateway-conf
-        - name: tls
-          secret:
-            secretName: rancher-tls
-EOF
+  # TLS: cert-manager issues a self-signed Rancher CA (tls.source=rancher)
+  helm upgrade --install cert-manager jetstack/cert-manager \
+    --version "${CERT_MANAGER_VER}" \
+    --namespace cert-manager --create-namespace \
+    --set crds.enabled=true \
+    --wait --timeout 5m
 
-  kubectl apply -f /etc/kubernetes/addons/rancher/rancher-mgmt.yaml
-  kubectl rollout status deployment/rancher-server -n cattle-system --timeout=180s
+  RANCHER_CHART_VER="${RANCHER_VER#v}"
+  helm upgrade --install rancher rancher-stable/rancher \
+    --version "${RANCHER_CHART_VER}" \
+    --namespace cattle-system --create-namespace \
+    --set hostname="${RANCHER_HOST}" \
+    --set bootstrapPassword="${RANCHER_BOOTSTRAP_PASS}" \
+    --set replicas=1 \
+    --set ingress.tls.source=rancher \
+    --wait --timeout 15m
+  kubectl -n cattle-system rollout status deployment/rancher --timeout=600s
+  echo "Rancher URL: https://${RANCHER_HOST} (map it to a node IP in DNS or /etc/hosts)"
 else
   echo "[2/3] Standalone VM detected — installing Docker CE 27.4.1 + rancher-container.service..."
   mkdir -p /etc/apt/keyrings
@@ -207,7 +152,7 @@ fi
 echo "[3/3] Verifying Rancher HTTPS /ping endpoint and CLI..."
 ok=0
 for i in $(seq 1 60); do
-  if curl -fsk https://127.0.0.1/ping >/dev/null 2>&1; then ok=1; break; fi
+  if curl -fsk -H "Host: ${RANCHER_HOST:-localhost}" https://127.0.0.1/ping >/dev/null 2>&1; then ok=1; break; fi
   sleep 5
 done
 if [[ ${ok} -ne 1 ]]; then
