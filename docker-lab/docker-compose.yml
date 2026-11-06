@@ -13,7 +13,7 @@ services:
   # Layer 1B: External Stateful Databases & Cache (Outside K8s)
   # ==========================================================================
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: devops-postgres
     restart: unless-stopped
     profiles: [core, quality, all]

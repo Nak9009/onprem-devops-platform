@@ -90,7 +90,7 @@ To accommodate different developer workstation capabilities, services are divide
 | **Garage Admin API** | `dxflrs/garage:v1.1.0` | `http://localhost:3903` | `http://garage:3903` | Token: `ChangeMeAdminToken1234567890` |
 | **Garage S3 Web** | `dxflrs/garage:v1.1.0` | `http://localhost:3902` | `http://garage:3902` | Static web serving for buckets |
 | **SonarQube** | `sonarqube:community` | `http://localhost:9002` | `http://sonarqube:9000` | `admin` / `admin` |
-| **PostgreSQL 17** | `postgres:17-alpine` | `localhost:5435` | `postgres:5432` | `postgres` / `ChangeMePostgres123!` |
+| **PostgreSQL 16** | `postgres:16-alpine` | `localhost:5435` | `postgres:5432` | `postgres` / `ChangeMePostgres123!` |
 | **Redis** | `redis:alpine` | `localhost:6381` | `redis:6379` | *(No password)* |
 | **Prometheus** | `prom/prometheus:latest` | `http://localhost:9090` | `http://prometheus:9090` | *(Open)* |
 | **Grafana** | `grafana/grafana-oss:latest` | `http://localhost:3000` | `http://grafana:3000` | `admin` / `ChangeMeGrafana123!` |
